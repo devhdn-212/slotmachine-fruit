@@ -1,4 +1,5 @@
 <script lang="ts">
+  import logoUrl from './assets/logo2.png';
   // ── Simbol definisi ────────────────────────────────
   type SymDef = {
     id: string
@@ -568,7 +569,10 @@
   <div class="top-bar">
     <!-- Row 1: BET | TITLE | CREDIT -->
     <div class="top-title">
-      <div class="title">BOARD JACKPOT</div>
+      <div class="logo-wrapper">
+        <img src="{logoUrl}" alt="Logo Aplikasi" class="main-logo" />
+      </div>
+      <div class="title"></div>
       <div class="subtitle">Pragmatic Style · RTP {actualRTP || 94}%</div>
     </div>
     <div class="top-row1">
@@ -1269,6 +1273,39 @@
     margin-bottom: 12px;
     width: 100%;
   }
+  .logo-wrapper {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+    /* PERUBAHAN UTAMA: Naikkan tinggi container agar gambar bisa mekar maksimal */
+    height: 120px; 
+    width: 100%;
+    
+    /* Memberikan ruang/jarak dari batas paling atas layar supaya logo turun */
+    padding-top: 10px; 
+    
+    /* Jarak aman ke teks bawah (Pragmatic Style...) */
+    margin-bottom: 5px;
+  }
+  .main-logo {
+   position: relative;
+  
+  /* Menghilangkan properti height: 100% lama agar tidak terkunci */
+  height: auto; 
+  
+  /* Set lebar dasar logo sebelum di-scale */
+  width: 180px;  
+  object-fit: contain;
+  
+  /* PERUBAHAN UTAMA: Naikkan angka scale jika ingin gambar jauh lebih besar */
+  transform: scale(1.6); 
+  transform-origin: center center;
+  
+  /* Efek glow tipis di sekitar logo */
+  filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.4));
+}
   .top-row1 {
     display: flex;
   align-items: center;
