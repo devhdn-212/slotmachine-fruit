@@ -177,7 +177,13 @@
   let totalBet    = $state(0)
   let totalPayout = $state(0)
 
-  let todayVol     = $derived(VOL_TIERS.find(v=>v.id===volId) ?? VOL_TIERS[1])
+  let todayVol       = $derived(VOL_TIERS.find(v=>v.id===volId) ?? VOL_TIERS[1])
+  // Font size credit otomatis menyesuaikan panjang angka
+  let creditFontSize = $derived(
+    fmt(displayCredit).length <= 7  ? '20px' :
+    fmt(displayCredit).length <= 10 ? '15px' :
+    fmt(displayCredit).length <= 13 ? '12px' : '10px'
+  )
   let pickedDef    = $derived(BY_ID[picked])
   let pickedHR     = $derived(getSymHitRate(picked, todayVol))
   let potentialWin = $derived(bet * (BY_ID[picked]?.pay ?? 1))
@@ -194,6 +200,59 @@
   let autoLeft    = $state(0)
   let autoDelay   = $state(800)
   let autoTimer: ReturnType<typeof setTimeout>|null = null
+
+  // ── Credit roll animation ──────────────────────────
+  let displayCredit = $state(credit)
+  let creditRolling = $state(false)
+  let creditDir     = $state<'up'|'down'|null>(null)  // naik atau turun
+  let creditTimer: ReturnType<typeof setTimeout>|null = null
+
+  function animateCredit(from: number, to: number) {
+    if (from === to) return
+    creditDir = to > from ? 'up' : 'down'
+    creditRolling = true
+
+    const diff = to - from
+    const absDiff = Math.abs(diff)
+
+    // Durasi lebih panjang — min 800ms, max 2.5 detik
+    const duration = Math.min(Math.max(absDiff / 50, 800), 2500)
+    // Steps lebih banyak untuk efek roll yang smooth
+    const steps = Math.min(Math.max(Math.floor(absDiff / 100), 20), 60)
+    const stepSize = diff / steps
+    const stepDuration = duration / steps
+
+    let current = from
+    let step = 0
+
+    if (creditTimer) clearInterval(creditTimer)
+    creditTimer = setInterval(() => {
+      step++
+      // Easing — lambat di awal dan akhir (ease in-out)
+      const progress = step / steps
+      const ease = progress < 0.5
+        ? 2 * progress * progress
+        : 1 - Math.pow(-2 * progress + 2, 2) / 2
+      displayCredit = Math.round(from + diff * ease)
+
+      if (step >= steps) {
+        displayCredit = to
+        creditRolling = false
+        creditDir = null
+        clearInterval(creditTimer!)
+        creditTimer = null
+      }
+    }, stepDuration)
+  }
+
+  // Watch credit changes
+  let prevCredit = credit
+  $effect(() => {
+    if (credit !== prevCredit) {
+      animateCredit(prevCredit, credit)
+      prevCredit = credit
+    }
+  })
 
   // ── Stop Loss & Win Limit ──────────────────────────
   let useStopLoss   = $state(false)
@@ -268,6 +327,8 @@
   // ── Admin config panel ─────────────────────────────
   let showAdmin   = $state(false)
   let showSim     = $state(false)
+  let showVol     = $state(false)
+  let activeTab   = $state<'spin'|'auto'>('spin')
   // editable copy untuk admin
   let adminConfig = $state(VOL_TIERS.map(v => ({...v})))
 
@@ -505,28 +566,84 @@
 <div class="game">
   <!-- Top bar -->
   <div class="top-bar">
-    <div>
-      <div class="lbl">BET</div>
-      <div class="led">{fmt(bet)}</div>
+    <!-- BET + SIMBOL di kiri -->
+    <div class="top-left">
+      <div class="bet-inline">
+        <div class="lbl">BET</div>
+        <div style="display:flex;gap:4px;align-items:center;margin-top:2px">
+          <button class="btn-sm" onclick={()=>changeBet(-1)} disabled={spinning}>-</button>
+          <div class="led">{fmt(bet)}</div>
+          <button class="btn-sm" onclick={()=>changeBet(1)} disabled={spinning}>+</button>
+        </div>
+      </div>
     </div>
+
+    <!-- Title di tengah -->
     <div class="title-box">
       <div class="title">BOARD JACKPOT</div>
       <div class="subtitle">Pragmatic Style · RTP {actualRTP || 94}%</div>
-      <div style="display:flex;gap:6px;margin-top:2px">
-        <button class="btn-shuffle" onclick={shuffleBoard} disabled={spinning}>🔀 Shuffle</button>
-        <button class="btn-shuffle" class:admin-active={showAdmin} onclick={()=>showAdmin=!showAdmin}>⚙️ Admin</button>
-        <button class="btn-shuffle" class:admin-active={showSim} onclick={()=>showSim=!showSim}>📊 Sim</button>
-      </div>
-    </div>
-    <div style="text-align:right">
-      <div class="lbl">CREDIT</div>
-      <div class="led" class:led-low={credit < bet * 5} class:led-empty={credit <= 0}>{fmt(credit)}</div>
-      <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end">
-        <button class="btn-topup" onclick={openTopup}>+ Topup</button>
+      <div class="top-btns">
+        <button class="btn-shuffle" onclick={shuffleBoard} disabled={spinning}>🔀</button>
+        <button class="btn-shuffle" class:admin-active={showVol} onclick={()=>showVol=!showVol}>
+          {#if volId==='low'}🟢{:else if volId==='high'}🔴{:else}🟡{/if}
+          {VOL_TIERS.find(v=>v.id===volId)?.label}
+        </button>
+        <button class="btn-shuffle" class:admin-active={showAdmin} onclick={()=>showAdmin=!showAdmin}>⚙️</button>
+        <button class="btn-shuffle" class:admin-active={showSim} onclick={()=>showSim=!showSim}>📊</button>
         <button class="btn-info-tog" onclick={()=>showInfo=!showInfo}>ℹ️</button>
       </div>
     </div>
+
+    <!-- CREDIT di kanan -->
+    <div class="top-right">
+      <div class="lbl" style="text-align:right">CREDIT</div>
+      <div
+        class="led led-credit"
+        class:led-low={credit < bet * 5}
+        class:led-empty={credit <= 0}
+        class:led-up={creditDir==='up'}
+        class:led-down={creditDir==='down'}
+        class:led-rolling={creditRolling}
+        style="font-size:{creditFontSize}"
+      >{fmt(displayCredit)}</div>
+      <button class="btn-topup" style="margin-top:4px;width:100%" onclick={openTopup}>+ Topup</button>
+    </div>
   </div>
+
+  <!-- Modal Volatility -->
+  {#if showVol}
+  <div class="modal-overlay" onclick={()=>showVol=false}>
+    <div class="modal-box" style="max-width:400px" onclick={(e)=>e.stopPropagation()}>
+      <div class="modal-header">
+        <div class="modal-title">📊 Pilih Volatility</div>
+        <button class="modal-close" onclick={()=>showVol=false}>×</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+        {#each VOL_TIERS as v}
+          <button
+            class="vol-modal-btn"
+            class:vol-modal-selected={volId===v.id}
+            class:vol-modal-low={v.id==='low'}
+            class:vol-modal-med={v.id==='medium'}
+            class:vol-modal-high={v.id==='high'}
+            onclick={()=>{ selectVol(v.id); showVol=false }}
+          >
+            <div class="vol-modal-top">
+              <span class="vol-modal-label">{v.id==='low'?'🟢':v.id==='high'?'🔴':'🟡'} {v.label}</span>
+              <span class="vol-modal-rtp">RTP {Math.round(v.rtp*100)}%</span>
+            </div>
+            <div class="vol-modal-desc">{v.desc}</div>
+            <div class="vol-modal-stats">
+              Win {Math.round(v.hitRate*100)}% · Max {v.maxWinMult}× bet
+            </div>
+          </button>
+        {/each}
+      </div>
+    </div>
+  </div>
+  {/if}
+
+
 
   <!-- Admin Config Panel -->
   {#if showAdmin}
@@ -593,19 +710,23 @@
   </div>
   {/if}
 
-  <!-- Volatility selector -->
-  <div class="vol-wrap">
-    {#each VOL_TIERS as v}
-      <button class="vol-btn"
-        class:selected={volId===v.id}
-        class:vol-low={v.id==='low'}
-        class:vol-med={v.id==='medium'}
-        class:vol-high={v.id==='high'}
-        onclick={()=>selectVol(v.id)}
-        disabled={spinning}>
-        <div class="vol-label">{v.label}</div>
-        <div class="vol-desc">{v.desc}</div>
-        <div class="vol-stats">Hit {Math.round(v.hitRate*100)}% · Max {v.maxWinMult}× · RTP {Math.round(v.rtp*100)}%</div>
+
+
+  <!-- Pick simbol — horizontal scroll 1 row -->
+  <div class="section-lbl" style="margin-bottom:4px">PILIH SIMBOL TARUHAN</div>
+  <div class="sym-slider">
+    {#each SYMDEFS as def}
+      {@const hr = getSymHitRate(def.id, todayVol)}
+      <button class="sym-btn" class:selected={def.id===picked} onclick={()=>selectPick(def.id)} disabled={spinning}>
+        {#if def.id==='bar'}
+          <div class="sym-bar"><div class="sb-top">BAR</div><div class="sb-mid">×100</div></div>
+        {:else if def.id==='sev77'}
+          <span class="sym-77">{def.emoji}</span>
+        {:else}
+          <span class="sym-em">{def.emoji}</span>
+        {/if}
+        <div class="sym-pay">×{def.pay}</div>
+        <div class="sym-hit">{(hr*100).toFixed(1)}%</div>
       </button>
     {/each}
   </div>
@@ -660,162 +781,150 @@
     </div>
   </div>
 
-  <!-- Pick simbol — horizontal scroll 1 row -->
-  <div class="section-lbl">PILIH SIMBOL TARUHAN</div>
-  <div class="sym-slider">
-    {#each SYMDEFS as def}
-      {@const hr = getSymHitRate(def.id, todayVol)}
-      <button class="sym-btn" class:selected={def.id===picked} onclick={()=>selectPick(def.id)} disabled={spinning}>
-        {#if def.id==='bar'}
-          <div class="sym-bar"><div class="sb-top">BAR</div><div class="sb-mid">×100</div></div>
-        {:else if def.id==='sev77'}
-          <span class="sym-77">{def.emoji}</span>
-        {:else}
-          <span class="sym-em">{def.emoji}</span>
-        {/if}
-        <div class="sym-pay">×{def.pay}</div>
-        <div class="sym-hit">{(hr*100).toFixed(1)}%</div>
+  <!-- Tab Spin / Auto -->
+  <div class="tab-wrap">
+    <!-- Tab header -->
+    <div class="tab-header">
+      <button class="tab-btn" class:tab-active={activeTab==='spin'} onclick={()=>activeTab='spin'}>
+        🎰 SPIN
       </button>
-    {/each}
-  </div>
-
-  <!-- Autospin -->
-  <div class="auto-wrap">
-    <div class="auto-row">
-      <div class="auto-group">
-        <div class="lbl">JUMLAH SPIN</div>
-        <div class="auto-opts">
-          {#each AUTO_OPTIONS as n}
-            <button class="auto-opt" class:selected={autoCount===n} onclick={()=>autoCount=n} disabled={autoSpin}>{n}×</button>
-          {/each}
-        </div>
-      </div>
-      <div class="auto-group">
-        <div class="lbl">KECEPATAN</div>
-        <div class="auto-opts">
-          {#each DELAY_OPTIONS as d}
-            <button class="auto-opt" class:selected={autoDelay===d.ms} onclick={()=>autoDelay=d.ms} disabled={autoSpin}>{d.label}</button>
-          {/each}
-        </div>
-      </div>
+      <button class="tab-btn" class:tab-active={activeTab==='auto'} onclick={()=>activeTab='auto'}>
+        ▶ AUTO SPIN
+        {#if autoSpin}<span class="tab-badge">{autoLeft}</span>{/if}
+      </button>
     </div>
 
-    <!-- Stop Loss & Win Limit -->
-    <div class="limit-row">
-      <!-- Stop Loss -->
-      <div class="limit-box" class:limit-active={useStopLoss}>
-        <div class="limit-header">
+    <!-- Tab content: SPIN -->
+    {#if activeTab === 'spin'}
+    <div class="tab-content">
+      <div class="spin-row">
+        <div class="bet-group">
+          <div class="lbl">BET</div>
+          <div class="bet-controls">
+            <button class="btn" onclick={()=>changeBet(-1)} disabled={spinning}>-</button>
+            <div class="bet-val">{fmt(bet)}</div>
+            <button class="btn" onclick={()=>changeBet(1)} disabled={spinning}>+</button>
+          </div>
+        </div>
+        <button class="btn-spin" onclick={doSpin} disabled={spinning||credit<bet}>
+          {spinning ? '...' : 'SPIN'}
+        </button>
+        <div class="win-group">
+          <div class="lbl">WIN</div>
+          <div class="win-val">{fmt(winAmount)}</div>
+        </div>
+      </div>
+      <div class="msg" class:win-flash={flashWin} class:near-msg={isNearMiss}>{msg}</div>
+    </div>
+    {/if}
+
+    <!-- Tab content: AUTO SPIN -->
+    {#if activeTab === 'auto'}
+    <div class="tab-content">
+      <!-- Bet di auto juga -->
+      <div class="auto-bet-row">
+        <div class="bet-group">
+          <div class="lbl">BET PER SPIN</div>
+          <div class="bet-controls">
+            <button class="btn" onclick={()=>changeBet(-1)} disabled={autoSpin}>-</button>
+            <div class="bet-val">{fmt(bet)}</div>
+            <button class="btn" onclick={()=>changeBet(1)} disabled={autoSpin}>+</button>
+          </div>
+        </div>
+        <div class="win-group">
+          <div class="lbl">LAST WIN</div>
+          <div class="win-val">{fmt(winAmount)}</div>
+        </div>
+      </div>
+
+      <!-- Jumlah & kecepatan -->
+      <div class="auto-opts-row">
+        <div class="auto-group">
+          <div class="lbl">JUMLAH</div>
+          <div class="auto-opts">
+            {#each AUTO_OPTIONS as n}
+              <button class="auto-opt" class:selected={autoCount===n} onclick={()=>autoCount=n} disabled={autoSpin}>{n}×</button>
+            {/each}
+          </div>
+        </div>
+        <div class="auto-group">
+          <div class="lbl">KECEPATAN</div>
+          <div class="auto-opts">
+            {#each DELAY_OPTIONS as d}
+              <button class="auto-opt" class:selected={autoDelay===d.ms} onclick={()=>autoDelay=d.ms} disabled={autoSpin}>{d.label}</button>
+            {/each}
+          </div>
+        </div>
+      </div>
+
+      <!-- Stop Loss & Win Limit -->
+      <div class="limit-row">
+        <div class="limit-box" class:limit-active={useStopLoss}>
           <label class="limit-toggle">
             <input type="checkbox" bind:checked={useStopLoss} disabled={autoSpin} />
             <span class="limit-title loss-title">🛑 Stop Loss</span>
           </label>
           <span class="limit-desc">Stop kalau modal turun</span>
-        </div>
-        {#if useStopLoss}
-          <div class="limit-control">
-            <input type="range" min="10" max="90" step="5"
-              bind:value={stopLossPct}
-              disabled={autoSpin}
-              class="limit-range loss-range"
-            />
-            <div class="limit-val-row">
-              <span class="limit-val loss-val">{stopLossPct}%</span>
-              {#if autoStartCredit > 0}
-                <span class="limit-calc">Stop di Rp {fmt(Math.floor(autoStartCredit * (1 - stopLossPct/100)))}</span>
-              {:else}
-                <span class="limit-calc">Stop di Rp {fmt(Math.floor(credit * (1 - stopLossPct/100)))}</span>
-              {/if}
+          {#if useStopLoss}
+            <div class="limit-control">
+              <input type="range" min="10" max="90" step="5" bind:value={stopLossPct} disabled={autoSpin} class="limit-range loss-range"/>
+              <div class="limit-val-row">
+                <span class="limit-val loss-val">{stopLossPct}%</span>
+                <span class="limit-calc">Stop di Rp {fmt(Math.floor(credit*(1-stopLossPct/100)))}</span>
+              </div>
             </div>
-          </div>
-        {/if}
-      </div>
-
-      <!-- Win Limit -->
-      <div class="limit-box" class:limit-active={useWinLimit}>
-        <div class="limit-header">
+          {/if}
+        </div>
+        <div class="limit-box" class:limit-active={useWinLimit}>
           <label class="limit-toggle">
             <input type="checkbox" bind:checked={useWinLimit} disabled={autoSpin} />
             <span class="limit-title win-title">🎉 Win Limit</span>
           </label>
           <span class="limit-desc">Stop kalau sudah profit</span>
-        </div>
-        {#if useWinLimit}
-          <div class="limit-control">
-            <input type="range" min="10" max="500" step="10"
-              bind:value={winLimitPct}
-              disabled={autoSpin}
-              class="limit-range win-range"
-            />
-            <div class="limit-val-row">
-              <span class="limit-val win-val">{winLimitPct}%</span>
-              {#if autoStartCredit > 0}
-                <span class="limit-calc">Stop di Rp {fmt(Math.floor(autoStartCredit * (1 + winLimitPct/100)))}</span>
-              {:else}
-                <span class="limit-calc">Stop di Rp {fmt(Math.floor(credit * (1 + winLimitPct/100)))}</span>
-              {/if}
+          {#if useWinLimit}
+            <div class="limit-control">
+              <input type="range" min="10" max="500" step="10" bind:value={winLimitPct} disabled={autoSpin} class="limit-range win-range"/>
+              <div class="limit-val-row">
+                <span class="limit-val win-val">{winLimitPct}%</span>
+                <span class="limit-calc">Target Rp {fmt(Math.floor(credit*(1+winLimitPct/100)))}</span>
+              </div>
             </div>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Auto button -->
+      <div style="text-align:center;margin-top:10px">
+        {#if autoSpin}
+          <div class="auto-status-wrap">
+            <div class="auto-status">Auto: <span class="auto-left">{autoLeft}</span> spin sisa</div>
+            {#if useStopLoss || useWinLimit}
+              <div class="auto-limit-status">
+                {#if useStopLoss}<span class="ls-badge">🛑 SL {stopLossPct}%</span>{/if}
+                {#if useWinLimit}<span class="wl-badge">🎉 WL +{winLimitPct}%</span>{/if}
+              </div>
+            {/if}
           </div>
+          <button class="btn-stop" onclick={stopAuto} style="margin-top:8px">⏹ STOP AUTO</button>
+        {:else}
+          <button class="btn-auto" onclick={startAuto} disabled={spinning||credit<bet}>
+            ▶ AUTO {autoCount}×
+            {#if useStopLoss || useWinLimit}
+              <span style="font-size:10px;opacity:0.8">
+                {useStopLoss?`SL-${stopLossPct}%`:''}
+                {useStopLoss&&useWinLimit?' · ':''}
+                {useWinLimit?`WL+${winLimitPct}%`:''}
+              </span>
+            {/if}
+          </button>
         {/if}
       </div>
+      <div class="msg" class:win-flash={flashWin} class:near-msg={isNearMiss}>{msg}</div>
     </div>
-
-    <div class="auto-row" style="justify-content:center;gap:10px;margin-top:8px">
-      {#if autoSpin}
-        <div class="auto-status-wrap">
-          <div class="auto-status">
-            Auto: <span class="auto-left">{autoLeft}</span> spin sisa
-          </div>
-          {#if useStopLoss || useWinLimit}
-            <div class="auto-limit-status">
-              {#if useStopLoss}
-                <span class="ls-badge">
-                  🛑 SL {stopLossPct}% · floor Rp {fmt(Math.floor(autoStartCredit*(1-stopLossPct/100)))}
-                </span>
-              {/if}
-              {#if useWinLimit}
-                <span class="wl-badge">
-                  🎉 WL {winLimitPct}% · target Rp {fmt(Math.floor(autoStartCredit*(1+winLimitPct/100)))}
-                </span>
-              {/if}
-            </div>
-          {/if}
-        </div>
-        <button class="btn-stop" onclick={stopAuto}>⏹ STOP</button>
-      {:else}
-        <button class="btn-auto" onclick={startAuto} disabled={spinning||credit<bet}>
-          ▶ AUTO {autoCount}×
-          {#if useStopLoss || useWinLimit}
-            <span style="font-size:10px;opacity:0.8">
-              {useStopLoss ? `SL-${stopLossPct}%` : ''}
-              {useStopLoss && useWinLimit ? ' · ' : ''}
-              {useWinLimit ? `WL+${winLimitPct}%` : ''}
-            </span>
-          {/if}
-        </button>
-      {/if}
-    </div>
+    {/if}
   </div>
 
 
-
-  <!-- Controls — bet + spin + win -->
-  <div class="controls">
-    <div class="bet-ctrl">
-      <div class="lbl" style="text-align:center">BET</div>
-      <div style="display:flex;gap:4px;align-items:center;margin-top:2px">
-        <button class="btn" onclick={()=>changeBet(-1)} disabled={spinning}>-</button>
-        <div class="bet-val">{fmt(bet)}</div>
-        <button class="btn" onclick={()=>changeBet(1)} disabled={spinning}>+</button>
-      </div>
-    </div>
-    <button class="btn-spin" onclick={doSpin} disabled={spinning||credit<bet}>{spinning?'...':'SPIN'}</button>
-    <div style="text-align:center">
-      <div class="lbl">WIN</div>
-      <div class="win-val">{fmt(winAmount)}</div>
-    </div>
-  </div>
-
-  <div class="msg" class:win-flash={flashWin} class:near-msg={isNearMiss}>{msg}</div>
 
   <!-- Info Win Panel — collapsible -->
   <details class="info-panel">
@@ -899,7 +1008,7 @@
     </div>
   </div>
   {/if}
-
+</div>
   <!-- Simulasi Panel -->
   <!-- Modal Simulasi -->
   {#if showSim}
@@ -1144,18 +1253,381 @@
   </div>
   {/if}
 
-</div>
+
+
 
 
 
 <style>
-  *{box-sizing:border-box}
+  :global(*){box-sizing:border-box}
   :global(body,html){background:#111118!important;margin:0;padding:0;min-height:100vh}
   :global(#app){background:#111118!important;min-height:100vh}
   :global(meta[name=theme-color]){content:#111118}
   .game{max-width:640px;margin:0 auto;padding:0.75rem;font-family:monospace;background:#111118;user-select:none;min-height:100vh}
-  .top-bar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:4px}
-  .led{background:#1a0000;color:#ff3333;font-size:18px;padding:6px 10px;border-radius:6px;min-width:80px;text-align:center;letter-spacing:2px;font-family:monospace}
+  .top-bar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;min-width:0}
+  .top-left{display:flex;flex-direction:column;gap:4px;min-width:0}
+  .top-right{display:flex;flex-direction:column;align-items:flex-end;gap:0;min-width:0}
+  .bet-inline{display:flex;flex-direction:column}
+  .btn-sm{background:#1a1a2e;color:#ffd700;border:2px solid #c8a84b;border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer;font-family:monospace}
+  .btn-sm:hover:not(:disabled){background:#2a2a4e}
+  .btn-sm:disabled{opacity:0.4;cursor:not-allowed}
+  .top-btns{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;justify-content:center}
+
+  /* Volatility modal */
+  .vol-modal-btn{width:100%;background:#0d0d1a;border:2px solid #333;border-radius:10px;padding:10px 14px;cursor:pointer;transition:all 0.15s;color:white;text-align:left}
+  .vol-modal-btn:hover{border-color:#ffd700}
+  .vol-modal-btn.vol-modal-selected{box-shadow:0 0 12px #ffd70066}
+  .vol-modal-btn.vol-modal-low.vol-modal-selected{border-color:#00cc66;background:#001a0d}
+  .vol-modal-btn.vol-modal-med.vol-modal-selected{border-color:#ffd700;background:#1a1500}
+  .vol-modal-btn.vol-modal-high.vol-modal-selected{border-color:#ff4444;background:#1a0000}
+  .vol-modal-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+  .vol-modal-label{font-size:14px;font-weight:700;color:#ffd700}
+  .vol-modal-btn.vol-modal-low.vol-modal-selected .vol-modal-label{color:#00cc66}
+  .vol-modal-btn.vol-modal-high.vol-modal-selected .vol-modal-label{color:#ff4444}
+  .vol-modal-rtp{font-size:11px;color:#888}
+  .vol-modal-desc{font-size:12px;color:#aaa;margin-bottom:3px}
+  .vol-modal-stats{font-size:10px;color:#666}
+  .led{background:#1a0000;color:#ff3333;font-size:18px;padding:6px 10px;border-radius:6px;min-width:70px;max-width:140px;width:auto;text-align:center;letter-spacing:1px;font-family:monospace;white-space:nowrap}
+  .lbl{font-size:10px;color:#aaa;margin-bottom:2px}
+  .title-box{text-align:center;padding-top:4px;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .title{font-size:15px;color:#ffd700;font-weight:700;letter-spacing:1px}
+  .subtitle{font-size:10px;color:#aaa}
+  .btn-shuffle{background:#1a1a2e;color:#888;border:1px solid #444;border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;transition:all 0.15s}
+  .btn-shuffle:hover:not(:disabled){border-color:#ffd700;color:#ffd700}
+  .btn-shuffle:disabled{opacity:0.4;cursor:not-allowed}
+  .admin-active{border-color:#ff8800!important;color:#ff8800!important}
+
+  /* Admin panel */
+  .admin-panel{background:#0d0d1a;border:2px solid #ff8800;border-radius:12px;padding:16px;margin-bottom:12px}
+  .admin-title{font-size:14px;color:#ff8800;font-weight:700;margin-bottom:4px}
+  .admin-subtitle{font-size:11px;color:#666;margin-bottom:12px}
+  .admin-tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+  .admin-tier{background:#0a0a14;border:1px solid #333;border-radius:8px;padding:10px}
+  .admin-tier.tier-low  {border-color:#00cc6644}
+  .admin-tier.tier-med  {border-color:#ffd70044}
+  .admin-tier.tier-high {border-color:#ff444444}
+  .admin-tier-label{font-size:12px;font-weight:700;color:#ffd700;margin-bottom:8px;text-align:center}
+  .admin-field{margin-bottom:8px}
+  .admin-field label{font-size:10px;color:#888;display:block;margin-bottom:3px}
+  .admin-input-row{display:flex;align-items:center;gap:6px}
+  .admin-input-row input[type=range]{flex:1;accent-color:#ffd700}
+  .admin-input-row input[type=number]{width:70px;background:#1a1a2e;color:#ffd700;border:1px solid #444;border-radius:4px;padding:3px 6px;font-size:12px;font-family:monospace}
+  .admin-val{font-size:12px;color:#ffd700;font-weight:700;min-width:36px;text-align:right}
+  .admin-hint{font-size:9px;color:#555;margin-top:2px}
+  .admin-projection{font-size:10px;color:#888;background:#111;border-radius:4px;padding:4px 6px;margin-top:6px;text-align:center}
+  .admin-actions{display:flex;gap:8px;justify-content:flex-end}
+  .admin-btn-reset{background:#1a1a1a;color:#888;border:1px solid #444;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer}
+  .admin-btn-cancel{background:#1a1a1a;color:#aaa;border:1px solid #444;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer}
+  .admin-btn-apply{background:#1a3a00;color:#00ff88;border:2px solid #00cc66;border-radius:6px;padding:6px 16px;font-size:12px;font-weight:700;cursor:pointer}
+  .admin-btn-apply:hover{background:#224400}
+
+  /* Vol */
+  /* vol-wrap removed */
+
+  /* Board */
+  .board-wrap{background:#1a1a2e;border:3px solid #c8a84b;border-radius:12px;padding:8px}
+  .board-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(7,1fr);gap:7px}
+  .cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:6px;border:2px solid #444;background:#0d0d1a;overflow:hidden;transition:background 0.08s,border-color 0.08s,box-shadow 0.08s,transform 0.08s}
+  .cell.active{background:#3a2a00;border-color:#ffd700;box-shadow:0 0 12px #ffd700,0 0 24px #ffd70066;transform:scale(1.1);z-index:2}
+  .cell.highlight{background:#003a1a;border-color:#00ff88;box-shadow:0 0 8px #00ff8866}
+  .cell.near-cell{background:#3a0a00;border-color:#ff4444;box-shadow:0 0 12px #ff4444;animation:nearpulse 0.4s ease-in-out 3}
+  .cell.empty{background:transparent;border:none}
+  @keyframes nearpulse{0%,100%{box-shadow:0 0 12px #ff4444}50%{box-shadow:0 0 24px #ff4444,0 0 40px #ff444088}}
+  .cell-em{font-size:clamp(18px,4vw,42px);line-height:1}
+  .cell-77{font-size:clamp(12px,2.5vw,28px);font-weight:800;color:#ff3300;line-height:1}
+  .bar-wrap{display:flex;flex-direction:column;align-items:center;width:92%}
+  .bar-top,.bar-bot{background:#fff;color:#000;font-size:14px;font-weight:800;width:100%;text-align:center;line-height:1.5;letter-spacing:1px}
+  .bar-mid{background:#cc2200;color:#fff;font-size:14px;font-weight:800;width:100%;text-align:center;line-height:1.6}
+  .center-panel{grid-column:2/7;grid-row:2/7;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0a1628;border-radius:10px;border:2px solid #c8a84b;gap:6px;padding:12px;transition:border-color 0.3s}
+  .center-panel.near-miss{border-color:#ff4444;background:#1a0808;animation:nearflash 0.5s ease-in-out 2}
+  @keyframes nearflash{0%,100%{background:#0a1628}50%{background:#2a0808}}
+  .center-sym-wrap{display:flex;align-items:center;justify-content:center}
+  .c-em{font-size:clamp(48px,12vw,100px);line-height:1}
+  .c77{font-size:clamp(40px,10vw,80px);font-weight:800;color:#ff3300;line-height:1}
+  .center-bar{width:160px}
+  .cb-top,.cb-bot{background:#fff;color:#000;font-size:22px;font-weight:800;text-align:center;padding:5px 0;letter-spacing:2px}
+  .cb-mid{background:#cc2200;color:#fff;font-size:32px;font-weight:800;text-align:center;padding:8px 0}
+  .center-count{font-size:11px;color:#888}
+  .center-num{font-size:clamp(36px,8vw,72px);color:#ff3333;line-height:1;font-family:monospace;font-weight:700}
+  .center-lbl{font-size:15px;color:#aaa;text-align:center}
+
+  /* Paytable */
+  .section-lbl{font-size:10px;color:#aaa;text-align:center;margin-top:10px;margin-bottom:6px}
+  /* Sym slider — horizontal scroll 1 row */
+  .sym-slider{display:flex;gap:6px;overflow-x:auto;padding:4px 2px 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .sym-slider::-webkit-scrollbar{display:none}
+  .sym-btn{flex:0 0 64px;background:#0d0d1a;border:2px solid #333;border-radius:8px;padding:6px 4px;cursor:pointer;transition:all 0.15s;color:white;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:64px}
+  .sym-btn:hover:not(:disabled){border-color:#ffd700;background:#1a1a00}
+  .sym-btn.selected{border-color:#ffd700;background:#2a2000;box-shadow:0 0 10px #ffd70088}
+  .sym-btn:disabled{opacity:0.5;cursor:not-allowed}
+  .sym-em{font-size:28px;line-height:1}
+  .sym-77{font-size:20px;font-weight:800;color:#ff3300;line-height:1}
+  .sym-bar{width:48px}
+  .sb-top{background:#fff;color:#000;font-size:8px;font-weight:800;text-align:center;padding:2px;letter-spacing:1px;border-radius:3px 3px 0 0}
+  .sb-mid{background:#cc2200;color:#fff;font-size:9px;font-weight:800;text-align:center;padding:2px;border-radius:0 0 3px 3px}
+  .sym-pay{font-size:12px;color:#ffd700;font-weight:700;line-height:1}
+  .sym-hit{font-size:9px;color:#888;line-height:1}
+
+  /* Info Panel collapsible */
+  .info-panel{background:#0d0d1a;border:2px solid #c8a84b44;border-radius:12px;margin-top:10px}
+  .info-panel[open]{padding-bottom:14px}
+  .info-summary{padding:12px 14px;font-size:12px;color:#c8a84b;font-weight:700;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}
+  .info-summary::-webkit-details-marker{display:none}
+  .info-summary::after{content:'▼';margin-left:auto;font-size:10px;color:#555}
+  .info-panel[open] .info-summary::after{content:'▲'}
+  .info-content{padding:0 14px}
+  .sim-summary{font-size:13px;color:#4488cc;font-weight:700;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;padding:4px 0 10px}
+  .sim-summary::-webkit-details-marker{display:none}
+  .sim-summary::after{content:'▼';margin-left:auto;font-size:10px;color:#555}
+  .sim-panel[open] .sim-summary::after{content:'▲'}
+
+  /* Info Panel */
+  .info-title{font-size:12px;color:#c8a84b;font-weight:700;margin-bottom:10px;letter-spacing:1px}
+  .info-content{display:flex;flex-direction:column;gap:10px}
+  .info-formula{display:flex;align-items:center;justify-content:center;gap:12px;background:#111;border-radius:8px;padding:12px}
+  .info-bet{font-size:24px;color:#ffd700;font-weight:700;font-family:monospace}
+  .info-op{font-size:20px;color:#555;font-weight:700}
+  .info-pay{font-size:24px;color:#4488cc;font-weight:700;font-family:monospace}
+  .info-result{font-size:28px;color:#00ff88;font-weight:700;font-family:monospace}
+  .info-desc{font-size:13px;color:#aaa;text-align:center;line-height:1.6}
+  .info-win-amount{color:#00ff88;font-size:15px}
+  .info-stats{display:flex;align-items:center;gap:0;background:#111;border-radius:8px;overflow:hidden}
+  .info-stat{flex:1;text-align:center;padding:10px 6px}
+  .info-stat-div{width:1px;background:#222;align-self:stretch}
+  .info-stat-label{font-size:9px;color:#666;margin-bottom:4px}
+  .info-stat-val{font-size:16px;color:#ffd700;font-weight:700;font-family:monospace}
+  .info-stat-val.win-val{color:#00ff88}
+  .info-stat-val.loss-val{color:#ff4444}
+  .info-stat-sub{font-size:9px;color:#555;margin-top:2px}
+  .info-note{font-size:11px;color:#666;text-align:center;padding:6px;background:#111;border-radius:6px}
+  .info-note strong{color:#aaa}
+
+  /* Autospin */
+  .auto-wrap{background:#0d0d1a;border:1px solid #333;border-radius:10px;padding:10px 12px;margin-top:10px}
+  .auto-row{display:flex;gap:16px;align-items:flex-start}
+  .auto-group{display:flex;flex-direction:column;gap:4px}
+  .auto-opts{display:flex;gap:4px;flex-wrap:wrap}
+  .auto-opt{background:#1a1a2e;color:#aaa;border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:monospace;transition:all 0.15s}
+  .auto-opt:hover:not(:disabled){border-color:#ffd700;color:#ffd700}
+  .auto-opt.selected{border-color:#ffd700;color:#ffd700;background:#2a2000}
+  .auto-opt:disabled{opacity:0.4;cursor:not-allowed}
+  .auto-status{font-size:13px;color:#aaa;display:flex;align-items:center;gap:6px}
+  .auto-left{color:#ffd700;font-weight:700;font-size:16px;font-family:monospace}
+  .btn-auto{background:#1a4a1a;color:#00ff88;border:2px solid #00cc66;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:monospace;transition:all 0.15s}
+  .btn-auto:hover:not(:disabled){background:#225522}
+  .btn-auto:disabled{opacity:0.4;cursor:not-allowed}
+  .btn-stop{background:#4a1a1a;color:#ff4444;border:2px solid #cc2222;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:monospace;animation:pulsestop 1s ease-in-out infinite}
+  @keyframes pulsestop{0%,100%{box-shadow:0 0 0 0 #cc222244}50%{box-shadow:0 0 0 6px #cc222200}}
+
+  /* Tab system */
+  .tab-wrap{background:#0d0d1a;border:1px solid #333;border-radius:12px;overflow:hidden;margin-top:8px}
+  .tab-header{display:flex;border-bottom:1px solid #222}
+  .tab-btn{flex:1;background:none;border:none;color:#666;font-size:13px;font-weight:700;padding:10px;cursor:pointer;font-family:monospace;transition:all 0.15s;border-bottom:2px solid transparent}
+  .tab-btn:hover{color:#aaa;background:#ffffff08}
+  .tab-btn.tab-active{color:#ffd700;border-bottom-color:#ffd700;background:#ffffff05}
+  .tab-badge{background:#ff3333;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:4px;vertical-align:middle}
+  .tab-content{padding:12px}
+  .spin-row{display:flex;align-items:center;justify-content:center;gap:16px}
+  .bet-group{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .bet-controls{display:flex;gap:4px;align-items:center}
+  .win-group{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:60px}
+  .auto-bet-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #222}
+  .auto-opts-row{display:flex;gap:12px;margin-bottom:10px}
+
+  /* Stop Loss & Win Limit */
+  .limit-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .limit-box{background:#0a0a14;border:1px solid #222;border-radius:8px;padding:10px}
+  .limit-box.limit-active{border-color:#444}
+  .limit-header{display:flex;flex-direction:column;gap:3px;margin-bottom:0}
+  .limit-toggle{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .limit-toggle input[type=checkbox]{width:14px;height:14px;cursor:pointer;accent-color:#ffd700}
+  .limit-title{font-size:12px;font-weight:700}
+  .loss-title{color:#ff4444}
+  .win-title{color:#00ff88}
+  .limit-desc{font-size:10px;color:#555;padding-left:20px}
+  .limit-control{margin-top:8px}
+  .limit-range{width:100%;accent-color:#ffd700}
+  .loss-range{accent-color:#ff4444}
+  .win-range{accent-color:#00ff88}
+  .limit-val-row{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
+  .limit-val{font-size:14px;font-weight:700;font-family:monospace}
+  .loss-val{color:#ff4444}
+  .win-val{color:#00ff88}
+  .limit-calc{font-size:10px;color:#666}
+  .auto-status-wrap{display:flex;flex-direction:column;gap:4px;align-items:center}
+  .auto-limit-status{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .ls-badge{font-size:10px;color:#ff4444;background:#3a000033;padding:2px 8px;border-radius:4px;border:1px solid #ff444433}
+  .wl-badge{font-size:10px;color:#00ff88;background:#003a1a33;padding:2px 8px;border-radius:4px;border:1px solid #00ff8833}
+
+  /* Controls */
+  .controls{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px}
+  .bet-ctrl{text-align:center}
+  .bet-val{color:#ffd700;font-size:16px;width:80px;text-align:center}
+  .btn{background:#1a1a2e;color:#ffd700;border:2px solid #c8a84b;border-radius:8px;padding:6px 14px;font-size:16px;cursor:pointer;font-family:monospace}
+  .btn:hover:not(:disabled){background:#2a2a4e}
+  .btn:disabled{opacity:0.4;cursor:not-allowed}
+  .btn-spin{background:#cc1111;color:white;border:3px solid #c8a84b;border-radius:50%;width:74px;height:74px;font-size:15px;font-weight:700;cursor:pointer;font-family:monospace;transition:background 0.15s,transform 0.1s}
+  .btn-spin:hover:not(:disabled){background:#ee2222;transform:scale(1.06)}
+  .btn-spin:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+  .win-val{font-size:24px;color:#00ff88;font-family:monospace;min-width:80px;text-align:center}
+  .msg{text-align:center;min-height:26px;font-size:15px;color:#ffd700;margin-top:8px;font-family:monospace;font-weight:700}
+  .msg.near-msg{color:#ff4444}
+  .win-flash{animation:wflash 0.4s ease-in-out 4}
+  @keyframes wflash{0%,100%{color:#ffd700}50%{color:#ff3333}}
+
+  /* Stats */
+  .stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px}
+  .stat-box{background:#0d0d1a;border:1px solid #333;border-radius:8px;padding:8px 6px;text-align:center}
+  .stat-box.win-stat{border-color:#00ff88}
+  .stat-box.near-stat{border-color:#ff8800}
+  .stat-box.lose-stat{border-color:#ff3333}
+  .stat-label{font-size:9px;color:#666;margin-bottom:2px}
+  .stat-val{font-size:20px;color:#ffd700;font-weight:700;font-family:monospace}
+  .stat-box.win-stat .stat-val{color:#00ff88}
+  .stat-box.near-stat .stat-val{color:#ff8800}
+  .stat-box.lose-stat .stat-val{color:#ff4444}
+
+  /* Profit */
+  .profit-wrap{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .profit-box{background:#0d0d1a;border:1px solid #333;border-radius:10px;padding:12px;text-align:center}
+  .profit-box.house-box{border-color:#c8a84b}
+  .profit-box.member-box{border-color:#4488cc}
+  .profit-label{font-size:12px;color:#aaa;margin-bottom:6px}
+  .profit-val{font-size:26px;font-weight:700;font-family:monospace;line-height:1}
+  .profit-val.profit-pos{color:#00ff88}
+  .profit-val.profit-neg{color:#ff4444}
+  .profit-sub{font-size:10px;color:#555;margin-top:4px}
+
+  /* Simulasi */
+  .sim-panel{background:#0d0d1a;border:2px solid #4488cc;border-radius:12px;padding:12px 16px;margin-top:10px}
+  .sim-title{font-size:14px;color:#4488cc;font-weight:700;margin-bottom:10px}
+  .sim-form{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:10px}
+  .sim-field{display:flex;flex-direction:column;gap:3px}
+  .sim-field label{font-size:10px;color:#888}
+  .sim-field input,.sim-field select{background:#1a1a2e;color:#ffd700;border:1px solid #444;border-radius:4px;padding:4px 8px;font-size:12px;font-family:monospace}
+  .sim-btn{background:#1a2a4a;color:#4488cc;border:2px solid #4488cc;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;width:100%;font-family:monospace;transition:all 0.15s}
+  .sim-btn:hover:not(:disabled){background:#223355}
+  .sim-btn:disabled{opacity:0.5;cursor:not-allowed}
+  .sim-result{margin-top:12px;border-top:1px solid #333;padding-top:12px}
+  .sim-result-title{font-size:12px;color:#aaa;margin-bottom:8px;text-align:center}
+  .sim-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+  .sim-item{background:#0a0a14;border:1px solid #222;border-radius:6px;padding:8px;text-align:center}
+  .sim-item.big{grid-column:span 1}
+  .sim-item-label{font-size:9px;color:#666;margin-bottom:3px}
+  .sim-item-val{font-size:16px;font-weight:700;font-family:monospace}
+  .sim-item-val.profit{color:#00ff88}
+  .sim-item-val.loss{color:#ff4444}
+  .sim-item-val.neutral{color:#ffd700}
+
+  /* History */
+  .history-wrap{margin-top:10px}
+  .history-title{font-size:10px;color:#aaa;text-align:center;margin-bottom:6px;letter-spacing:1px}
+  .history-list{display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto}
+  .h-row{display:flex;align-items:center;gap:8px;background:#0d0d1a;border:1px solid #222;border-radius:6px;padding:6px 10px;font-size:12px}
+  .h-row.h-win{border-color:#00ff8844}
+  .h-row.h-lose{border-color:#ff333322}
+  .h-row.h-near{border-color:#ff880044}
+  .h-round{color:#555;font-size:11px;min-width:28px}
+  .h-badge{font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;min-width:40px;text-align:center}
+  .badge-win{background:#003a1a;color:#00ff88}
+  .badge-lose{background:#3a0000;color:#ff4444}
+  .badge-near{background:#3a2000;color:#ff8800}
+  .h-sym{font-size:18px;min-width:28px;text-align:center}
+  .h-bar{background:#fff;color:#000;font-size:9px;font-weight:800;padding:1px 4px;border-radius:2px}
+  .h-77{color:#ff3300;font-weight:800;font-size:13px}
+  .h-vol{font-size:10px;color:#555;min-width:44px}
+  .h-detail{flex:1;color:#888;font-size:11px}
+  .h-num{color:#ffd700}
+  .h-win-num{color:#00ff88;font-weight:700}
+  .h-credit{color:#aaa;font-size:11px;font-family:monospace;min-width:60px;text-align:right}
+
+  /* LED states */
+  .led-credit{transition:color 0.2s;position:relative;overflow:hidden}
+  .led-rolling{letter-spacing:2px}
+  .led-up{
+    color:#00ff88!important;
+    animation:creditUp 0.3s ease-out;
+  }
+  .led-down{
+    color:#ff4444!important;
+    animation:creditDown 0.3s ease-out;
+  }
+  @keyframes creditUp{
+    0%  {transform:translateY(10px);opacity:0.4}
+    60% {transform:translateY(-2px);opacity:1}
+    100%{transform:translateY(0);opacity:1}
+  }
+  @keyframes creditDown{
+    0%  {transform:translateY(-10px);opacity:0.4}
+    60% {transform:translateY(2px);opacity:1}
+    100%{transform:translateY(0);opacity:1}
+  }
+  .led-low{color:#ff8800!important}
+  .led-empty{color:#ff3333!important;animation:ledpulse 0.8s ease-in-out infinite}
+  @keyframes ledpulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+  /* Topup & Info buttons */
+  .btn-topup{background:#1a3a00;color:#00ff88;border:1px solid #00cc66;border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;font-family:monospace;transition:all 0.15s}
+  .btn-topup:hover{background:#225500}
+  .btn-info-tog{background:#1a1a2e;color:#4488cc;border:1px solid #4488cc44;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;transition:all 0.15s}
+  .btn-info-tog:hover{border-color:#4488cc;background:#1a2a4a}
+
+  /* Modal overlay */
+  .modal-overlay{position:fixed;inset:0;background:#00000088;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+  .modal-box{background:#0d0d1a;border:2px solid #c8a84b;border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
+  .modal-info-box{max-width:560px}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .modal-title{font-size:16px;color:#ffd700;font-weight:700}
+  .modal-close{background:none;border:none;color:#aaa;font-size:22px;cursor:pointer;line-height:1;padding:0 4px}
+  .modal-close:hover{color:#fff}
+  .modal-empty-msg{background:#3a0000;border:1px solid #cc2200;border-radius:8px;padding:10px;font-size:13px;color:#ff8888;text-align:center;margin-bottom:12px}
+  .modal-credit-now{font-size:12px;color:#888;margin-bottom:12px;text-align:center}
+  .modal-credit-val{color:#ffd700;font-weight:700;font-size:14px}
+
+  /* Topup */
+  .topup-label{font-size:11px;color:#888;margin-bottom:6px}
+  .topup-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:4px}
+  .topup-preset{background:#1a1a2e;color:#aaa;border:1px solid #333;border-radius:8px;padding:8px 4px;font-size:12px;cursor:pointer;font-family:monospace;transition:all 0.15s;text-align:center}
+  .topup-preset:hover{border-color:#ffd700;color:#ffd700}
+  .topup-preset.topup-selected{border-color:#ffd700;color:#ffd700;background:#2a2000}
+  .topup-custom-row{display:flex;align-items:center;gap:6px;background:#111;border:1px solid #444;border-radius:8px;padding:6px 10px}
+  .topup-rp{font-size:13px;color:#888}
+  .topup-input{flex:1;background:none;border:none;outline:none;color:#ffd700;font-size:15px;font-family:monospace}
+  .topup-error{font-size:11px;color:#ff4444;margin-top:6px}
+  .topup-info{font-size:11px;color:#888;text-align:center;margin:8px 0 4px;min-height:16px}
+  .topup-info strong{color:#00ff88}
+  .topup-btn{width:100%;background:#1a3a00;color:#00ff88;border:2px solid #00cc66;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:monospace;margin-top:8px;transition:all 0.15s}
+  .topup-btn:hover{background:#225500}
+
+  /* Info modal */
+  .info-sections{display:flex;flex-direction:column;gap:14px}
+  .info-section{background:#0a0a14;border:1px solid #222;border-radius:8px;padding:12px}
+  .info-sec-title{font-size:12px;color:#ffd700;font-weight:700;margin-bottom:8px}
+  .info-list{margin:0;padding-left:18px;font-size:12px;color:#aaa;display:flex;flex-direction:column;gap:4px}
+  .info-list li{line-height:1.5}
+  .info-list strong{color:#ffd700}
+  .info-pay-table{display:flex;flex-direction:column;gap:4px}
+  .info-pay-row{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;background:#111}
+  .info-pay-sym{font-size:20px;min-width:28px;text-align:center}
+  .ibar{background:#fff;color:#000;font-size:9px;font-weight:800;padding:1px 4px;border-radius:2px}
+  .i77{color:#ff3300;font-weight:800;font-size:13px}
+  .info-pay-name{font-size:11px;color:#888;min-width:60px}
+  .info-pay-mult{font-size:12px;color:#4488cc;font-weight:700;min-width:36px}
+  .info-pay-win{font-size:11px;color:#666;flex:1}
+  .info-pay-result{color:#00ff88;font-weight:700}
+  .info-vol-table{display:flex;flex-direction:column;gap:4px}
+  .info-vol-row{background:#111;border:1px solid #222;border-radius:6px;padding:8px 10px}
+  .info-vol-row.info-vol-active{border-color:#ffd700;background:#1a1500}
+  .info-vol-name{font-size:12px;color:#ffd700;font-weight:700;margin-bottom:2px}
+  .info-vol-desc{font-size:11px;color:#888;margin-bottom:2px}
+  .info-vol-stats{font-size:10px;color:#555}
+  .info-vol-row.info-vol-active .info-vol-stats{color:#888}
+  :global(body,html){background:#111118!important;margin:0;padding:0;min-height:100vh}
+  :global(#app){background:#111118!important;min-height:100vh}
+  :global(meta[name=theme-color]){content:#111118}
+  .game{max-width:640px;margin:0 auto;padding:0.75rem;font-family:monospace;background:#111118;user-select:none;min-height:100vh}
+  .top-bar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:4px;min-width:0}
+  .led{background:#1a0000;color:#ff3333;font-size:18px;padding:6px 10px;border-radius:6px;min-width:70px;max-width:140px;width:auto;text-align:center;letter-spacing:1px;font-family:monospace;white-space:nowrap}
   .lbl{font-size:10px;color:#aaa;margin-bottom:2px}
   .title-box{text-align:center;padding-top:4px;display:flex;flex-direction:column;align-items:center;gap:4px}
   .title{font-size:15px;color:#ffd700;font-weight:700;letter-spacing:1px}
@@ -1407,6 +1879,26 @@
   .h-credit{color:#aaa;font-size:11px;font-family:monospace;min-width:60px;text-align:right}
 
   /* LED states */
+  .led-credit{transition:color 0.2s;position:relative;overflow:hidden}
+  .led-rolling{letter-spacing:2px}
+  .led-up{
+    color:#00ff88!important;
+    animation:creditUp 0.3s ease-out;
+  }
+  .led-down{
+    color:#ff4444!important;
+    animation:creditDown 0.3s ease-out;
+  }
+  @keyframes creditUp{
+    0%  {transform:translateY(10px);opacity:0.4}
+    60% {transform:translateY(-2px);opacity:1}
+    100%{transform:translateY(0);opacity:1}
+  }
+  @keyframes creditDown{
+    0%  {transform:translateY(-10px);opacity:0.4}
+    60% {transform:translateY(2px);opacity:1}
+    100%{transform:translateY(0);opacity:1}
+  }
   .led-low{color:#ff8800!important}
   .led-empty{color:#ff3333!important;animation:ledpulse 0.8s ease-in-out infinite}
   @keyframes ledpulse{0%,100%{opacity:1}50%{opacity:0.4}}
