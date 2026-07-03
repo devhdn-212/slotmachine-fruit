@@ -267,6 +267,7 @@
 
   // ── Admin config panel ─────────────────────────────
   let showAdmin   = $state(false)
+  let showSim     = $state(false)
   // editable copy untuk admin
   let adminConfig = $state(VOL_TIERS.map(v => ({...v})))
 
@@ -514,6 +515,7 @@
       <div style="display:flex;gap:6px;margin-top:2px">
         <button class="btn-shuffle" onclick={shuffleBoard} disabled={spinning}>🔀 Shuffle</button>
         <button class="btn-shuffle" class:admin-active={showAdmin} onclick={()=>showAdmin=!showAdmin}>⚙️ Admin</button>
+        <button class="btn-shuffle" class:admin-active={showSim} onclick={()=>showSim=!showSim}>📊 Sim</button>
       </div>
     </div>
     <div style="text-align:right">
@@ -658,82 +660,24 @@
     </div>
   </div>
 
-  <!-- Pick simbol -->
+  <!-- Pick simbol — horizontal scroll 1 row -->
   <div class="section-lbl">PILIH SIMBOL TARUHAN</div>
-  <div class="paytable">
+  <div class="sym-slider">
     {#each SYMDEFS as def}
       {@const hr = getSymHitRate(def.id, todayVol)}
-      <button class="pay-btn" class:selected={def.id===picked} onclick={()=>selectPick(def.id)} disabled={spinning}>
+      <button class="sym-btn" class:selected={def.id===picked} onclick={()=>selectPick(def.id)} disabled={spinning}>
         {#if def.id==='bar'}
-          <div class="pt-bar"><div class="ptb-top">BAR</div><div class="ptb-mid">×100</div></div>
+          <div class="sym-bar"><div class="sb-top">BAR</div><div class="sb-mid">×100</div></div>
         {:else if def.id==='sev77'}
-          <span class="pt-77">{def.emoji}</span>
+          <span class="sym-77">{def.emoji}</span>
         {:else}
-          <span class="pt-em">{def.emoji}</span>
+          <span class="sym-em">{def.emoji}</span>
         {/if}
-        <div class="pt-info">
-          <div class="pt-pay">×{def.pay}</div>
-          <div class="pt-hit">Win {(hr*100).toFixed(1)}%</div>
-        </div>
+        <div class="sym-pay">×{def.pay}</div>
+        <div class="sym-hit">{(hr*100).toFixed(1)}%</div>
       </button>
     {/each}
   </div>
-
-  <!-- Info Win Panel — collapsible -->
-  <details class="info-panel">
-  <summary class="info-summary">💡 INFO TARUHAN · {fmt(bet)} × {pickedDef.pay} = {fmt(potentialWin)}</summary>
-    <div class="info-title">💡 INFO TARUHAN</div>
-    <div class="info-content">
-      <div class="info-formula">
-        <span class="info-bet">{fmt(bet)}</span>
-        <span class="info-op">×</span>
-        <span class="info-pay">{pickedDef.pay}</span>
-        <span class="info-op">=</span>
-        <span class="info-result">{fmt(potentialWin)}</span>
-      </div>
-      <div class="info-desc">
-        Bet <strong>{fmt(bet)}</strong> pilih
-        {#if pickedDef.id === 'bar'}
-          <strong>BAR</strong>
-        {:else if pickedDef.id === 'sev77'}
-          <strong>77</strong>
-        {:else}
-          {pickedDef.emoji} <strong>{pickedDef.label}</strong>
-        {/if}
-        → kalau menang dapat
-        <strong class="info-win-amount">Rp {fmt(potentialWin)}</strong>
-      </div>
-      <div class="info-stats">
-        <div class="info-stat">
-          <div class="info-stat-label">Peluang Menang</div>
-          <div class="info-stat-val">{(pickedHR*100).toFixed(2)}%</div>
-          <div class="info-stat-sub">~1 dari {Math.round(1/pickedHR)} spin</div>
-        </div>
-        <div class="info-stat-div"></div>
-        <div class="info-stat">
-          <div class="info-stat-label">Jika Kalah</div>
-          <div class="info-stat-val loss-val">-{fmt(bet)}</div>
-          <div class="info-stat-sub">bet hangus</div>
-        </div>
-        <div class="info-stat-div"></div>
-        <div class="info-stat">
-          <div class="info-stat-label">Jika Menang</div>
-          <div class="info-stat-val win-val">+{fmt(potentialWin)}</div>
-          <div class="info-stat-sub">×{pickedDef.pay} dari bet</div>
-        </div>
-        <div class="info-stat-div"></div>
-        <div class="info-stat">
-          <div class="info-stat-label">Volatility</div>
-          <div class="info-stat-val">{todayVol.label}</div>
-          <div class="info-stat-sub">RTP {Math.round(todayVol.rtp*100)}%</div>
-        </div>
-      </div>
-      <div class="info-note">
-        Rata-rata menang setiap <strong>{Math.round(1/pickedHR)}</strong> spin ·
-        Modal <strong>{fmt(bet * Math.round(1/pickedHR))}</strong> untuk 1 kemenangan
-      </div>
-    </div>
-  </details>
 
   <!-- Autospin -->
   <div class="auto-wrap">
@@ -852,7 +796,9 @@
     </div>
   </div>
 
-  <!-- Controls -->
+
+
+  <!-- Controls — bet + spin + win -->
   <div class="controls">
     <div class="bet-ctrl">
       <div class="lbl" style="text-align:center">BET</div>
@@ -870,6 +816,61 @@
   </div>
 
   <div class="msg" class:win-flash={flashWin} class:near-msg={isNearMiss}>{msg}</div>
+
+  <!-- Info Win Panel — collapsible -->
+  <details class="info-panel">
+  <summary class="info-summary">💡 INFO TARUHAN · {fmt(bet)} × {pickedDef.pay} = {fmt(potentialWin)}</summary>
+    <div class="info-content">
+      <div class="info-formula">
+        <span class="info-bet">{fmt(bet)}</span>
+        <span class="info-op">×</span>
+        <span class="info-pay">{pickedDef.pay}</span>
+        <span class="info-op">=</span>
+        <span class="info-result">{fmt(potentialWin)}</span>
+      </div>
+      <div class="info-desc">
+        Bet <strong>{fmt(bet)}</strong> pilih
+        {#if pickedDef.id === 'bar'}
+          <strong>BAR</strong>
+        {:else if pickedDef.id === 'sev77'}
+          <strong>77</strong>
+        {:else}
+          {pickedDef.emoji} <strong>{pickedDef.label}</strong>
+        {/if}
+        → kalau menang dapat
+        <strong class="info-win-amount">Rp {fmt(potentialWin)}</strong>
+      </div>
+      <div class="info-stats">
+        <div class="info-stat">
+          <div class="info-stat-label">Peluang Menang</div>
+          <div class="info-stat-val">{(pickedHR*100).toFixed(2)}%</div>
+          <div class="info-stat-sub">~1 dari {Math.round(1/pickedHR)} spin</div>
+        </div>
+        <div class="info-stat-div"></div>
+        <div class="info-stat">
+          <div class="info-stat-label">Jika Kalah</div>
+          <div class="info-stat-val loss-val">-{fmt(bet)}</div>
+          <div class="info-stat-sub">bet hangus</div>
+        </div>
+        <div class="info-stat-div"></div>
+        <div class="info-stat">
+          <div class="info-stat-label">Jika Menang</div>
+          <div class="info-stat-val win-val">+{fmt(potentialWin)}</div>
+          <div class="info-stat-sub">×{pickedDef.pay} dari bet</div>
+        </div>
+        <div class="info-stat-div"></div>
+        <div class="info-stat">
+          <div class="info-stat-label">Volatility</div>
+          <div class="info-stat-val">{todayVol.label}</div>
+          <div class="info-stat-sub">RTP {Math.round(todayVol.rtp*100)}%</div>
+        </div>
+      </div>
+      <div class="info-note">
+        Rata-rata menang setiap <strong>{Math.round(1/pickedHR)}</strong> spin ·
+        Modal <strong>{fmt(bet * Math.round(1/pickedHR))}</strong> untuk 1 kemenangan
+      </div>
+    </div>
+  </details>
 
   <!-- Stats -->
   <div class="stats-bar">
@@ -900,8 +901,15 @@
   {/if}
 
   <!-- Simulasi Panel -->
-  <details class="sim-panel"><summary class="sim-summary">📊 SIMULASI PENDAPATAN HOUSE</summary>
-    <div class="sim-title">📊 SIMULASI PENDAPATAN HOUSE</div>
+  <!-- Modal Simulasi -->
+  {#if showSim}
+  <div class="modal-overlay" onclick={()=>showSim=false}>
+    <div class="modal-box" onclick={(e)=>e.stopPropagation()} style="max-width:520px">
+      <div class="modal-header">
+        <div class="modal-title">📊 SIMULASI PENDAPATAN HOUSE</div>
+        <button class="modal-close" onclick={()=>showSim=false}>×</button>
+      </div>
+      <div class="sim-title">📊 SIMULASI PENDAPATAN HOUSE</div>
     <div class="sim-form">
       <div class="sim-field">
         <label>Jumlah Hari</label>
@@ -981,34 +989,10 @@
       </div>
     </div>
     {/if}
-  </details>
-
-  <!-- History -->
-  {#if history.length > 0}
-  <div class="history-wrap">
-    <div class="history-title">RIWAYAT SPIN</div>
-    <div class="history-list">
-      {#each history as h}
-        <div class="h-row" class:h-win={h.result==='WIN'} class:h-lose={h.result==='LOSE'} class:h-near={h.result==='NEAR'}>
-          <div class="h-round">#{h.round}</div>
-          <div class="h-badge" class:badge-win={h.result==='WIN'} class:badge-lose={h.result==='LOSE'} class:badge-near={h.result==='NEAR'}>
-            {h.result==='NEAR'?'NEAR':h.result}
-          </div>
-          <div class="h-sym">
-            {#if h.sym==='bar'}<span class="h-bar">BAR</span>
-            {:else if h.sym==='sev77'}<span class="h-77">77</span>
-            {:else}{h.emoji}{/if}
-          </div>
-          <div class="h-vol">{h.vol}</div>
-          <div class="h-detail">Bet <span class="h-num">{fmt(h.bet)}</span>
-            {#if h.result==='WIN'}→ <span class="h-win-num">+{fmt(h.win)}</span>{/if}
-          </div>
-          <div class="h-credit">{fmt(h.credit)}</div>
-        </div>
-      {/each}
     </div>
   </div>
   {/if}
+
   <!-- Modal Topup -->
   {#if showTopup}
   <div class="modal-overlay" onclick={()=>{ if(credit > 0) showTopup=false }}>
@@ -1160,13 +1144,15 @@
   </div>
   {/if}
 
-
-
 </div>
+
+
+
 <style>
   *{box-sizing:border-box}
   :global(body,html){background:#111118!important;margin:0;padding:0;min-height:100vh}
   :global(#app){background:#111118!important;min-height:100vh}
+  :global(meta[name=theme-color]){content:#111118}
   .game{max-width:640px;margin:0 auto;padding:0.75rem;font-family:monospace;background:#111118;user-select:none;min-height:100vh}
   .top-bar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:4px}
   .led{background:#1a0000;color:#ff3333;font-size:18px;padding:6px 10px;border-radius:6px;min-width:80px;text-align:center;letter-spacing:2px;font-family:monospace}
@@ -1247,20 +1233,20 @@
 
   /* Paytable */
   .section-lbl{font-size:10px;color:#aaa;text-align:center;margin-top:10px;margin-bottom:6px}
-  .paytable{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
-  .pay-btn{background:#0d0d1a;border:2px solid #333;border-radius:8px;padding:8px 6px;cursor:pointer;transition:all 0.15s;color:white;display:flex;flex-direction:column;align-items:center;gap:4px}
-  .pay-btn:hover:not(:disabled){border-color:#ffd700;background:#1a1a00}
-  .pay-btn.selected{border-color:#ffd700;background:#2a2000;box-shadow:0 0 10px #ffd70088}
-  .pay-btn:disabled{opacity:0.5;cursor:not-allowed}
-  .pt-em{font-size:clamp(24px,5vw,42px);line-height:1}
-  .pt-77{font-size:34px;font-weight:800;color:#ff3300}
-  .pt-bar{width:52px}
-  .ptb-top{background:#fff;color:#000;font-size:9px;font-weight:800;text-align:center;padding:2px;letter-spacing:1px;border-radius:3px 3px 0 0}
-  .ptb-mid{background:#cc2200;color:#fff;font-size:11px;font-weight:800;text-align:center;padding:2px;border-radius:0 0 3px 3px}
-  .pt-info{display:flex;flex-direction:column;align-items:center;gap:1px}
-  .pt-pay{font-size:14px;color:#ffd700;font-weight:700}
-  .pt-count{font-size:11px;color:#666}
-  .pt-hit{font-size:10px;color:#888}
+  /* Sym slider — horizontal scroll 1 row */
+  .sym-slider{display:flex;gap:6px;overflow-x:auto;padding:4px 2px 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .sym-slider::-webkit-scrollbar{display:none}
+  .sym-btn{flex:0 0 64px;background:#0d0d1a;border:2px solid #333;border-radius:8px;padding:6px 4px;cursor:pointer;transition:all 0.15s;color:white;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:64px}
+  .sym-btn:hover:not(:disabled){border-color:#ffd700;background:#1a1a00}
+  .sym-btn.selected{border-color:#ffd700;background:#2a2000;box-shadow:0 0 10px #ffd70088}
+  .sym-btn:disabled{opacity:0.5;cursor:not-allowed}
+  .sym-em{font-size:28px;line-height:1}
+  .sym-77{font-size:20px;font-weight:800;color:#ff3300;line-height:1}
+  .sym-bar{width:48px}
+  .sb-top{background:#fff;color:#000;font-size:8px;font-weight:800;text-align:center;padding:2px;letter-spacing:1px;border-radius:3px 3px 0 0}
+  .sb-mid{background:#cc2200;color:#fff;font-size:9px;font-weight:800;text-align:center;padding:2px;border-radius:0 0 3px 3px}
+  .sym-pay{font-size:12px;color:#ffd700;font-weight:700;line-height:1}
+  .sym-hit{font-size:9px;color:#888;line-height:1}
 
   /* Info Panel collapsible */
   .info-panel{background:#0d0d1a;border:2px solid #c8a84b44;border-radius:12px;margin-top:10px}
