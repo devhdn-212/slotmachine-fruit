@@ -567,6 +567,10 @@
   <!-- Top bar -->
   <div class="top-bar">
     <!-- Row 1: BET | TITLE | CREDIT -->
+    <div class="top-title">
+      <div class="title">BOARD JACKPOT</div>
+      <div class="subtitle">Pragmatic Style · RTP {actualRTP || 94}%</div>
+    </div>
     <div class="top-row1">
       <div class="top-bet">
         <div class="lbl">BET</div>
@@ -576,12 +580,6 @@
             <button class="btn-sm" onclick={()=>changeBet(1)} disabled={spinning}>+</button>
         </div>
       </div>
-
-      <div class="top-title">
-        <div class="title">BOARD JACKPOT</div>
-        <div class="subtitle">Pragmatic Style · RTP {actualRTP || 94}%</div>
-      </div>
-
       <div class="top-credit">
         <div class="lbl" style="text-align:right">CREDIT</div>
         <div
@@ -591,8 +589,7 @@
           class:led-up={creditDir==='up'}
           class:led-down={creditDir==='down'}
           class:led-rolling={creditRolling}
-          style="font-size:{creditFontSize}"
-        >{fmt(displayCredit)}</div>
+          style="font-size:{creditFontSize}">{fmt(displayCredit)}</div>
       </div>
     </div>
 
@@ -1265,13 +1262,89 @@
   :global(#app){background:#111118!important;min-height:100vh}
   :global(meta[name=theme-color]){content:#111118}
   .game{max-width:640px;margin:0 auto;padding:0.75rem;font-family:monospace;background:#111118;user-select:none;min-height:100vh}
-  .top-bar{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
-  .top-row1{display:flex;align-items:center;justify-content:space-between;gap:4px}
-  .top-bet{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .top-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 14px; /* Memberi jarak konsisten antar baris */
+    margin-bottom: 12px;
+    width: 100%;
+  }
+  .top-row1 {
+    display: flex;
+  align-items: center;
+  justify-content: space-between; /* Mendorong BET ke ujung kiri & CREDIT ke ujung kanan */
+  width: 100%;
+  }
+  .top-bet {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start; /* Konten internal BET rata kiri */
+    gap: 4px;
+  }
+  .lbl {
+    color: #8a8a9e;
+    font-size: 11px;
+    font-weight: bold;
+  }
+  .top-credit {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end; /* Konten internal CREDIT rata kanan */
+    gap: 4px;
+  }
   .bet-row{display:flex;gap:3px;align-items:center}
-  .top-title{text-align:center;flex:1;min-width:0}
+  .top-title {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Membuat teks ke tengah secara horizontal */
+    text-align: center;   /* Memastikan baris teks rata tengah */
+    width: 100%;
+  }
+  .title {
+    color: #ffd700;
+    font-size: 18px;
+    font-weight: bold;
+    letter-spacing: 1px;
+  }
+  .subtitle {
+    color: #8a8a9e;
+    font-size: 11px;
+    margin-top: 2px;
+  }
+  .bet-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  /* Tombol Plus Minus (-) (+) */
+  .btn-sm {
+    background: #1a1a2e;
+    color: #ffd700;
+    border: 2px solid #c8a84b;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-sm:hover:not(:disabled) {
+    background: #c8a84b;
+    color: #1a1a2e;
+  }
+  .btn-sm:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
   .top-credit{display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:0}
-  .top-row2{display:flex;gap:4px;align-items:center;justify-content:center;flex-wrap:wrap}
+  .top-row2 {
+    display: flex;
+    justify-content: center; /* Membuat semua tombol berkumpul di tengah */
+    align-items: center;
+    gap: 6px; /* Jarak antar tombol ikon */
+    width: 100%;
+    flex-wrap: wrap; /* Supaya aman jika layar handphone terlalu kecil */
+  }
   .btn-sm{background:#1a1a2e;color:#ffd700;border:2px solid #c8a84b;border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer;font-family:monospace}
   .btn-sm:hover:not(:disabled){background:#2a2a4e}
   .btn-sm:disabled{opacity:0.4;cursor:not-allowed}
