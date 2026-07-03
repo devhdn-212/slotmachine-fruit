@@ -679,8 +679,9 @@
     {/each}
   </div>
 
-  <!-- Info Win Panel -->
-  <div class="info-panel">
+  <!-- Info Win Panel — collapsible -->
+  <details class="info-panel">
+  <summary class="info-summary">💡 INFO TARUHAN · {fmt(bet)} × {pickedDef.pay} = {fmt(potentialWin)}</summary>
     <div class="info-title">💡 INFO TARUHAN</div>
     <div class="info-content">
       <div class="info-formula">
@@ -732,7 +733,7 @@
         Modal <strong>{fmt(bet * Math.round(1/pickedHR))}</strong> untuk 1 kemenangan
       </div>
     </div>
-  </div>
+  </details>
 
   <!-- Autospin -->
   <div class="auto-wrap">
@@ -899,7 +900,7 @@
   {/if}
 
   <!-- Simulasi Panel -->
-  <div class="sim-panel">
+  <details class="sim-panel"><summary class="sim-summary">📊 SIMULASI PENDAPATAN HOUSE</summary>
     <div class="sim-title">📊 SIMULASI PENDAPATAN HOUSE</div>
     <div class="sim-form">
       <div class="sim-field">
@@ -980,7 +981,7 @@
       </div>
     </div>
     {/if}
-  </div>
+  </details>
 
   <!-- History -->
   {#if history.length > 0}
@@ -1159,18 +1160,19 @@
   </div>
   {/if}
 
-</div>
 
+
+</div>
 <style>
   *{box-sizing:border-box}
-  :global(body){background:#111118!important;margin:0;padding:0}
-  :global(html){background:#111118!important}
-  .game{max-width:960px;margin:0 auto;padding:1rem;font-family:monospace;background:#111118;user-select:none;min-height:100vh}
-  .top-bar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
-  .led{background:#1a0000;color:#ff3333;font-size:22px;padding:8px 14px;border-radius:6px;min-width:100px;text-align:center;letter-spacing:2px;font-family:monospace}
+  :global(body,html){background:#111118!important;margin:0;padding:0;min-height:100vh}
+  :global(#app){background:#111118!important;min-height:100vh}
+  .game{max-width:640px;margin:0 auto;padding:0.75rem;font-family:monospace;background:#111118;user-select:none;min-height:100vh}
+  .top-bar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:4px}
+  .led{background:#1a0000;color:#ff3333;font-size:18px;padding:6px 10px;border-radius:6px;min-width:80px;text-align:center;letter-spacing:2px;font-family:monospace}
   .lbl{font-size:10px;color:#aaa;margin-bottom:2px}
   .title-box{text-align:center;padding-top:4px;display:flex;flex-direction:column;align-items:center;gap:4px}
-  .title{font-size:18px;color:#ffd700;font-weight:700;letter-spacing:2px}
+  .title{font-size:15px;color:#ffd700;font-weight:700;letter-spacing:1px}
   .subtitle{font-size:10px;color:#aaa}
   .btn-shuffle{background:#1a1a2e;color:#888;border:1px solid #444;border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;transition:all 0.15s}
   .btn-shuffle:hover:not(:disabled){border-color:#ffd700;color:#ffd700}
@@ -1202,8 +1204,8 @@
   .admin-btn-apply:hover{background:#224400}
 
   /* Vol */
-  .vol-wrap{display:flex;gap:6px;margin-bottom:10px}
-  .vol-btn{flex:1;background:#0d0d1a;border:2px solid #333;border-radius:10px;padding:8px 6px;cursor:pointer;transition:all 0.15s;color:white;text-align:center}
+  .vol-wrap{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:8px}
+  .vol-btn{background:#0d0d1a;border:2px solid #333;border-radius:8px;padding:6px 4px;cursor:pointer;transition:all 0.15s;color:white;text-align:center;min-width:0}
   .vol-btn:hover:not(:disabled){border-color:#ffd700}
   .vol-btn.selected.vol-low{border-color:#00cc66;background:#001a0d}
   .vol-btn.selected.vol-med{border-color:#ffd700;background:#1a1500}
@@ -1225,8 +1227,8 @@
   .cell.near-cell{background:#3a0a00;border-color:#ff4444;box-shadow:0 0 12px #ff4444;animation:nearpulse 0.4s ease-in-out 3}
   .cell.empty{background:transparent;border:none}
   @keyframes nearpulse{0%,100%{box-shadow:0 0 12px #ff4444}50%{box-shadow:0 0 24px #ff4444,0 0 40px #ff444088}}
-  .cell-em{font-size:42px;line-height:1}
-  .cell-77{font-size:28px;font-weight:800;color:#ff3300;line-height:1}
+  .cell-em{font-size:clamp(18px,4vw,42px);line-height:1}
+  .cell-77{font-size:clamp(12px,2.5vw,28px);font-weight:800;color:#ff3300;line-height:1}
   .bar-wrap{display:flex;flex-direction:column;align-items:center;width:92%}
   .bar-top,.bar-bot{background:#fff;color:#000;font-size:14px;font-weight:800;width:100%;text-align:center;line-height:1.5;letter-spacing:1px}
   .bar-mid{background:#cc2200;color:#fff;font-size:14px;font-weight:800;width:100%;text-align:center;line-height:1.6}
@@ -1234,23 +1236,23 @@
   .center-panel.near-miss{border-color:#ff4444;background:#1a0808;animation:nearflash 0.5s ease-in-out 2}
   @keyframes nearflash{0%,100%{background:#0a1628}50%{background:#2a0808}}
   .center-sym-wrap{display:flex;align-items:center;justify-content:center}
-  .c-em{font-size:100px;line-height:1}
-  .c77{font-size:80px;font-weight:800;color:#ff3300;line-height:1}
+  .c-em{font-size:clamp(48px,12vw,100px);line-height:1}
+  .c77{font-size:clamp(40px,10vw,80px);font-weight:800;color:#ff3300;line-height:1}
   .center-bar{width:160px}
   .cb-top,.cb-bot{background:#fff;color:#000;font-size:22px;font-weight:800;text-align:center;padding:5px 0;letter-spacing:2px}
   .cb-mid{background:#cc2200;color:#fff;font-size:32px;font-weight:800;text-align:center;padding:8px 0}
   .center-count{font-size:11px;color:#888}
-  .center-num{font-size:72px;color:#ff3333;line-height:1;font-family:monospace;font-weight:700}
+  .center-num{font-size:clamp(36px,8vw,72px);color:#ff3333;line-height:1;font-family:monospace;font-weight:700}
   .center-lbl{font-size:15px;color:#aaa;text-align:center}
 
   /* Paytable */
   .section-lbl{font-size:10px;color:#aaa;text-align:center;margin-top:10px;margin-bottom:6px}
-  .paytable{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .paytable{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
   .pay-btn{background:#0d0d1a;border:2px solid #333;border-radius:8px;padding:8px 6px;cursor:pointer;transition:all 0.15s;color:white;display:flex;flex-direction:column;align-items:center;gap:4px}
   .pay-btn:hover:not(:disabled){border-color:#ffd700;background:#1a1a00}
   .pay-btn.selected{border-color:#ffd700;background:#2a2000;box-shadow:0 0 10px #ffd70088}
   .pay-btn:disabled{opacity:0.5;cursor:not-allowed}
-  .pt-em{font-size:42px;line-height:1}
+  .pt-em{font-size:clamp(24px,5vw,42px);line-height:1}
   .pt-77{font-size:34px;font-weight:800;color:#ff3300}
   .pt-bar{width:52px}
   .ptb-top{background:#fff;color:#000;font-size:9px;font-weight:800;text-align:center;padding:2px;letter-spacing:1px;border-radius:3px 3px 0 0}
@@ -1260,8 +1262,20 @@
   .pt-count{font-size:11px;color:#666}
   .pt-hit{font-size:10px;color:#888}
 
+  /* Info Panel collapsible */
+  .info-panel{background:#0d0d1a;border:2px solid #c8a84b44;border-radius:12px;margin-top:10px}
+  .info-panel[open]{padding-bottom:14px}
+  .info-summary{padding:12px 14px;font-size:12px;color:#c8a84b;font-weight:700;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}
+  .info-summary::-webkit-details-marker{display:none}
+  .info-summary::after{content:'▼';margin-left:auto;font-size:10px;color:#555}
+  .info-panel[open] .info-summary::after{content:'▲'}
+  .info-content{padding:0 14px}
+  .sim-summary{font-size:13px;color:#4488cc;font-weight:700;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;padding:4px 0 10px}
+  .sim-summary::-webkit-details-marker{display:none}
+  .sim-summary::after{content:'▼';margin-left:auto;font-size:10px;color:#555}
+  .sim-panel[open] .sim-summary::after{content:'▲'}
+
   /* Info Panel */
-  .info-panel{background:#0d0d1a;border:2px solid #c8a84b44;border-radius:12px;padding:14px;margin-top:10px}
   .info-title{font-size:12px;color:#c8a84b;font-weight:700;margin-bottom:10px;letter-spacing:1px}
   .info-content{display:flex;flex-direction:column;gap:10px}
   .info-formula{display:flex;align-items:center;justify-content:center;gap:12px;background:#111;border-radius:8px;padding:12px}
@@ -1325,7 +1339,7 @@
   .wl-badge{font-size:10px;color:#00ff88;background:#003a1a33;padding:2px 8px;border-radius:4px;border:1px solid #00ff8833}
 
   /* Controls */
-  .controls{display:flex;gap:12px;align-items:center;justify-content:center;margin-top:12px}
+  .controls{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px}
   .bet-ctrl{text-align:center}
   .bet-val{color:#ffd700;font-size:16px;width:80px;text-align:center}
   .btn{background:#1a1a2e;color:#ffd700;border:2px solid #c8a84b;border-radius:8px;padding:6px 14px;font-size:16px;cursor:pointer;font-family:monospace}
@@ -1364,9 +1378,9 @@
   .profit-sub{font-size:10px;color:#555;margin-top:4px}
 
   /* Simulasi */
-  .sim-panel{background:#0d0d1a;border:2px solid #4488cc;border-radius:12px;padding:16px;margin-top:10px}
+  .sim-panel{background:#0d0d1a;border:2px solid #4488cc;border-radius:12px;padding:12px 16px;margin-top:10px}
   .sim-title{font-size:14px;color:#4488cc;font-weight:700;margin-bottom:10px}
-  .sim-form{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+  .sim-form{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:10px}
   .sim-field{display:flex;flex-direction:column;gap:3px}
   .sim-field label{font-size:10px;color:#888}
   .sim-field input,.sim-field select{background:#1a1a2e;color:#ffd700;border:1px solid #444;border-radius:4px;padding:4px 8px;font-size:12px;font-family:monospace}
@@ -1387,7 +1401,7 @@
   /* History */
   .history-wrap{margin-top:10px}
   .history-title{font-size:10px;color:#aaa;text-align:center;margin-bottom:6px;letter-spacing:1px}
-  .history-list{display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto}
+  .history-list{display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto}
   .h-row{display:flex;align-items:center;gap:8px;background:#0d0d1a;border:1px solid #222;border-radius:6px;padding:6px 10px;font-size:12px}
   .h-row.h-win{border-color:#00ff8844}
   .h-row.h-lose{border-color:#ff333322}
