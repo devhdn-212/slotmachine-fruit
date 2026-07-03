@@ -189,11 +189,40 @@
   // autospin
   const AUTO_OPTIONS = [5,10,20,50,100]
   const DELAY_OPTIONS = [{label:'Cepat',ms:500},{label:'Normal',ms:800},{label:'Lambat',ms:1200}]
-  let autoSpin  = $state(false)
-  let autoCount = $state(10)
-  let autoLeft  = $state(0)
-  let autoDelay = $state(800)
+  let autoSpin    = $state(false)
+  let autoCount   = $state(10)
+  let autoLeft    = $state(0)
+  let autoDelay   = $state(800)
   let autoTimer: ReturnType<typeof setTimeout>|null = null
+
+  // ── Stop Loss & Win Limit ──────────────────────────
+  let useStopLoss   = $state(false)
+  let stopLossPct   = $state(50)    // stop kalau modal turun X%
+  let useWinLimit   = $state(false)
+  let winLimitPct   = $state(100)   // stop kalau profit X%
+  let autoStartCredit = $state(0)   // credit saat autospin dimulai
+  let autoStopReason  = $state('')  // kenapa autospin berhenti
+
+  function checkAutoLimits(): boolean {
+    if (!useStopLoss && !useWinLimit) return false
+
+    const currentProfit = credit - autoStartCredit
+    const profitPct = (currentProfit / autoStartCredit) * 100
+
+    // Stop loss check
+    if (useStopLoss && profitPct <= -stopLossPct) {
+      autoStopReason = `🛑 Stop Loss! Modal turun ${stopLossPct}% (${fmt(credit)} tersisa)`
+      return true
+    }
+
+    // Win limit check
+    if (useWinLimit && profitPct >= winLimitPct) {
+      autoStopReason = `🎉 Win Limit! Profit sudah ${winLimitPct}% (Credit: ${fmt(credit)})`
+      return true
+    }
+
+    return false
+  }
 
   // ── Modal Topup & Info ─────────────────────────────
   let showTopup    = $state(false)
@@ -376,11 +405,34 @@
   function selectPick(id:string) { if(spinning)return; picked=id; playClick() }
   function selectVol(id:string)  { if(spinning)return; volId=id; playClick() }
 
-  function startAuto() { if(autoSpin||credit<bet)return; autoSpin=true; autoLeft=autoCount; runAuto() }
+  function startAuto() {
+    if(autoSpin||credit<bet)return
+    autoSpin=true
+    autoLeft=autoCount
+    autoStartCredit=credit
+    autoStopReason=''
+    runAuto()
+  }
   function stopAuto()  { autoSpin=false; autoLeft=0; if(autoTimer){clearTimeout(autoTimer);autoTimer=null} }
   async function runAuto() {
     if(!autoSpin||autoLeft<=0||credit<bet){stopAuto();return}
+
+    // Cek stop loss / win limit sebelum spin
+    if (checkAutoLimits()) {
+      msg = autoStopReason
+      stopAuto()
+      return
+    }
+
     autoLeft--; await doSpin()
+
+    // Cek lagi setelah spin
+    if (checkAutoLimits()) {
+      msg = autoStopReason
+      stopAuto()
+      return
+    }
+
     if(autoSpin&&autoLeft>0&&credit>=bet) autoTimer=setTimeout(runAuto,autoDelay)
     else stopAuto()
   }
@@ -702,12 +754,99 @@
         </div>
       </div>
     </div>
-    <div class="auto-row" style="justify-content:center;gap:10px;margin-top:6px">
+
+    <!-- Stop Loss & Win Limit -->
+    <div class="limit-row">
+      <!-- Stop Loss -->
+      <div class="limit-box" class:limit-active={useStopLoss}>
+        <div class="limit-header">
+          <label class="limit-toggle">
+            <input type="checkbox" bind:checked={useStopLoss} disabled={autoSpin} />
+            <span class="limit-title loss-title">🛑 Stop Loss</span>
+          </label>
+          <span class="limit-desc">Stop kalau modal turun</span>
+        </div>
+        {#if useStopLoss}
+          <div class="limit-control">
+            <input type="range" min="10" max="90" step="5"
+              bind:value={stopLossPct}
+              disabled={autoSpin}
+              class="limit-range loss-range"
+            />
+            <div class="limit-val-row">
+              <span class="limit-val loss-val">{stopLossPct}%</span>
+              {#if autoStartCredit > 0}
+                <span class="limit-calc">Stop di Rp {fmt(Math.floor(autoStartCredit * (1 - stopLossPct/100)))}</span>
+              {:else}
+                <span class="limit-calc">Stop di Rp {fmt(Math.floor(credit * (1 - stopLossPct/100)))}</span>
+              {/if}
+            </div>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Win Limit -->
+      <div class="limit-box" class:limit-active={useWinLimit}>
+        <div class="limit-header">
+          <label class="limit-toggle">
+            <input type="checkbox" bind:checked={useWinLimit} disabled={autoSpin} />
+            <span class="limit-title win-title">🎉 Win Limit</span>
+          </label>
+          <span class="limit-desc">Stop kalau sudah profit</span>
+        </div>
+        {#if useWinLimit}
+          <div class="limit-control">
+            <input type="range" min="10" max="500" step="10"
+              bind:value={winLimitPct}
+              disabled={autoSpin}
+              class="limit-range win-range"
+            />
+            <div class="limit-val-row">
+              <span class="limit-val win-val">{winLimitPct}%</span>
+              {#if autoStartCredit > 0}
+                <span class="limit-calc">Stop di Rp {fmt(Math.floor(autoStartCredit * (1 + winLimitPct/100)))}</span>
+              {:else}
+                <span class="limit-calc">Stop di Rp {fmt(Math.floor(credit * (1 + winLimitPct/100)))}</span>
+              {/if}
+            </div>
+          </div>
+        {/if}
+      </div>
+    </div>
+
+    <div class="auto-row" style="justify-content:center;gap:10px;margin-top:8px">
       {#if autoSpin}
-        <div class="auto-status">Auto: <span class="auto-left">{autoLeft}</span> sisa</div>
+        <div class="auto-status-wrap">
+          <div class="auto-status">
+            Auto: <span class="auto-left">{autoLeft}</span> spin sisa
+          </div>
+          {#if useStopLoss || useWinLimit}
+            <div class="auto-limit-status">
+              {#if useStopLoss}
+                <span class="ls-badge">
+                  🛑 SL {stopLossPct}% · floor Rp {fmt(Math.floor(autoStartCredit*(1-stopLossPct/100)))}
+                </span>
+              {/if}
+              {#if useWinLimit}
+                <span class="wl-badge">
+                  🎉 WL {winLimitPct}% · target Rp {fmt(Math.floor(autoStartCredit*(1+winLimitPct/100)))}
+                </span>
+              {/if}
+            </div>
+          {/if}
+        </div>
         <button class="btn-stop" onclick={stopAuto}>⏹ STOP</button>
       {:else}
-        <button class="btn-auto" onclick={startAuto} disabled={spinning||credit<bet}>▶ AUTO {autoCount}×</button>
+        <button class="btn-auto" onclick={startAuto} disabled={spinning||credit<bet}>
+          ▶ AUTO {autoCount}×
+          {#if useStopLoss || useWinLimit}
+            <span style="font-size:10px;opacity:0.8">
+              {useStopLoss ? `SL-${stopLossPct}%` : ''}
+              {useStopLoss && useWinLimit ? ' · ' : ''}
+              {useWinLimit ? `WL+${winLimitPct}%` : ''}
+            </span>
+          {/if}
+        </button>
       {/if}
     </div>
   </div>
@@ -1157,6 +1296,31 @@
   .btn-auto:disabled{opacity:0.4;cursor:not-allowed}
   .btn-stop{background:#4a1a1a;color:#ff4444;border:2px solid #cc2222;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:monospace;animation:pulsestop 1s ease-in-out infinite}
   @keyframes pulsestop{0%,100%{box-shadow:0 0 0 0 #cc222244}50%{box-shadow:0 0 0 6px #cc222200}}
+
+  /* Stop Loss & Win Limit */
+  .limit-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .limit-box{background:#0a0a14;border:1px solid #222;border-radius:8px;padding:10px}
+  .limit-box.limit-active{border-color:#444}
+  .limit-header{display:flex;flex-direction:column;gap:3px;margin-bottom:0}
+  .limit-toggle{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .limit-toggle input[type=checkbox]{width:14px;height:14px;cursor:pointer;accent-color:#ffd700}
+  .limit-title{font-size:12px;font-weight:700}
+  .loss-title{color:#ff4444}
+  .win-title{color:#00ff88}
+  .limit-desc{font-size:10px;color:#555;padding-left:20px}
+  .limit-control{margin-top:8px}
+  .limit-range{width:100%;accent-color:#ffd700}
+  .loss-range{accent-color:#ff4444}
+  .win-range{accent-color:#00ff88}
+  .limit-val-row{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
+  .limit-val{font-size:14px;font-weight:700;font-family:monospace}
+  .loss-val{color:#ff4444}
+  .win-val{color:#00ff88}
+  .limit-calc{font-size:10px;color:#666}
+  .auto-status-wrap{display:flex;flex-direction:column;gap:4px;align-items:center}
+  .auto-limit-status{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .ls-badge{font-size:10px;color:#ff4444;background:#3a000033;padding:2px 8px;border-radius:4px;border:1px solid #ff444433}
+  .wl-badge{font-size:10px;color:#00ff88;background:#003a1a33;padding:2px 8px;border-radius:4px;border:1px solid #00ff8833}
 
   /* Controls */
   .controls{display:flex;gap:12px;align-items:center;justify-content:center;margin-top:12px}
