@@ -1,0 +1,867 @@
+<script lang="ts">
+  type SymDef = {
+    id: string
+    emoji: string
+    boardCount: number  // berapa kotak simbol ini di board
+    label: string
+    pay: number
+    weight: number
+  }
+
+  const SYMDEFS: SymDef[] = [
+    { id:'apple',  emoji:'🍎', boardCount:3, label:'Apel',     pay:5,   weight:22 },
+    { id:'orange', emoji:'🍊', boardCount:3, label:'Jeruk',    pay:10,  weight:18 },
+    { id:'wmelon', emoji:'🍉', boardCount:3, label:'Semangka', pay:15,  weight:14 },
+    { id:'melon',  emoji:'🍈', boardCount:2, label:'Melon',    pay:20,  weight:12 },
+    { id:'frog',   emoji:'🐸', boardCount:3, label:'Kodok',    pay:20,  weight:10 },
+    { id:'star',   emoji:'⭐', boardCount:3, label:'Bintang',  pay:30,  weight:8  },
+    { id:'sev77',  emoji:'77', boardCount:2, label:'77',       pay:40,  weight:6  },
+    { id:'bar',    emoji:'BAR',boardCount:3, label:'BAR',      pay:100, weight:4  },
+  ]
+
+  const SYM_IDS = SYMDEFS.map(s => s.id)
+  const BY_ID: Record<string, SymDef> = {}
+  for (const s of SYMDEFS) BY_ID[s.id] = s
+  const WEIGHTS = SYMDEFS.map(s => s.weight)
+
+  const BET_STEPS = [500,800,1000,1500,2000,2500,3000,3500,4000,4500,5000,10000,20000,30000,40000,50000]
+
+  type TimeSlot = {
+    label: string
+    fromHour: number  // 0-23
+    toHour: number    // 0-23
+    mode: 'house' | 'member'
+    winChance: number
+    maxMult: number
+    rtpPct: number
+  }
+  type DaySchedule = {
+    day: string
+    slots: TimeSlot[]
+  }
+  type ActiveConfig = TimeSlot & { day: string }
+
+  // Config profitable — house margin ~30% setiap hari
+  // Formula: winChance × bet × maxMult × rtpPct < bet × 0.70
+  // House Day:   0.20 × 4 × 0.70 = 0.56  → EV 56% dari bet → house profit 44%
+  // Member Day:  0.26 × 5 × 0.62 = 0.806 → EV 80% dari bet → house profit 20%
+  const SCHEDULE: DaySchedule[] = [
+    {
+      day: 'Minggu',
+      slots: [
+        { label: 'Dini Hari', fromHour: 0,  toHour: 6,  mode: 'house',  winChance: 0.18, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Pagi',      fromHour: 6,  toHour: 12, mode: 'member', winChance: 0.26, maxMult: 5, rtpPct: 0.62 },
+        { label: 'Siang',     fromHour: 12, toHour: 18, mode: 'member', winChance: 0.26, maxMult: 5, rtpPct: 0.62 },
+        { label: 'Malam',     fromHour: 18, toHour: 24, mode: 'member', winChance: 0.26, maxMult: 5, rtpPct: 0.62 },
+      ]
+    },
+    {
+      day: 'Senin',
+      slots: [
+        { label: 'Dini Hari', fromHour: 0,  toHour: 6,  mode: 'house',  winChance: 0.18, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Pagi',      fromHour: 6,  toHour: 12, mode: 'house',  winChance: 0.20, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Siang',     fromHour: 12, toHour: 18, mode: 'house',  winChance: 0.20, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Malam',     fromHour: 18, toHour: 24, mode: 'house',  winChance: 0.20, maxMult: 4, rtpPct: 0.70 },
+      ]
+    },
+    {
+      day: 'Selasa',
+      slots: [
+        { label: 'Dini Hari', fromHour: 0,  toHour: 6,  mode: 'house',  winChance: 0.18, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Pagi',      fromHour: 6,  toHour: 12, mode: 'member', winChance: 0.26, maxMult: 5, rtpPct: 0.62 },
+        { label: 'Siang',     fromHour: 12, toHour: 18, mode: 'member', winChance: 0.26, maxMult: 5, rtpPct: 0.62 },
+        { label: 'Malam',     fromHour: 18, toHour: 24, mode: 'member', winChance: 0.26, maxMult: 5, rtpPct: 0.62 },
+      ]
+    },
+    {
+      day: 'Rabu',
+      slots: [
+        { label: 'Dini Hari', fromHour: 0,  toHour: 6,  mode: 'house',  winChance: 0.18, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Pagi',      fromHour: 6,  toHour: 12, mode: 'member', winChance: 0.26, maxMult: 5, rtpPct: 0.62 },
+        { label: 'Siang',     fromHour: 12, toHour: 18, mode: 'house',  winChance: 0.20, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Malam',     fromHour: 18, toHour: 24, mode: 'member', winChance: 0.26, maxMult: 5, rtpPct: 0.62 },
+      ]
+    },
+    {
+      day: 'Kamis',
+      slots: [
+        { label: 'Dini Hari', fromHour: 0,  toHour: 6,  mode: 'house',  winChance: 0.18, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Pagi',      fromHour: 6,  toHour: 12, mode: 'house',  winChance: 0.20, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Siang',     fromHour: 12, toHour: 18, mode: 'house',  winChance: 0.20, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Malam',     fromHour: 18, toHour: 24, mode: 'house',  winChance: 0.20, maxMult: 4, rtpPct: 0.70 },
+      ]
+    },
+    {
+      day: 'Jumat',
+      slots: [
+        { label: 'Dini Hari', fromHour: 0,  toHour: 6,  mode: 'house',  winChance: 0.18, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Pagi',      fromHour: 6,  toHour: 12, mode: 'member', winChance: 0.26, maxMult: 5, rtpPct: 0.62 },
+        { label: 'Siang',     fromHour: 12, toHour: 18, mode: 'member', winChance: 0.26, maxMult: 5, rtpPct: 0.62 },
+        { label: 'Malam',     fromHour: 18, toHour: 24, mode: 'member', winChance: 0.26, maxMult: 5, rtpPct: 0.62 },
+      ]
+    },
+    {
+      day: 'Sabtu',
+      slots: [
+        { label: 'Dini Hari', fromHour: 0,  toHour: 6,  mode: 'house',  winChance: 0.18, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Pagi',      fromHour: 6,  toHour: 12, mode: 'house',  winChance: 0.20, maxMult: 4, rtpPct: 0.70 },
+        { label: 'Siang',     fromHour: 12, toHour: 18, mode: 'member', winChance: 0.26, maxMult: 5, rtpPct: 0.62 },
+        { label: 'Malam',     fromHour: 18, toHour: 24, mode: 'house',  winChance: 0.20, maxMult: 4, rtpPct: 0.70 },
+      ]
+    },
+  ]
+
+  function getTodayConfig(): ActiveConfig {
+    const now  = new Date()
+    const day  = now.getDay()   // 0=minggu
+    const hour = now.getHours()
+    const sched = SCHEDULE[day]
+    const slot  = sched.slots.find(s => hour >= s.fromHour && hour < s.toHour)
+      ?? sched.slots[sched.slots.length - 1]
+    return { ...slot, day: sched.day }
+  }
+
+  function calcWin(betAmount: number, pay: number, cnt: number): number {
+    const cfg    = getTodayConfig()
+    const raw    = betAmount * pay * Math.max(1, Math.floor(cnt/3))
+    const capped = Math.min(raw, betAmount * cfg.maxMult)
+    return Math.floor(capped * cfg.rtpPct)
+  }
+  const ROWS = 7, COLS = 7
+
+  type Cell = { r: number; c: number }
+
+  const BORDER_POS: Cell[] = []
+  for (let c=0; c<COLS; c++) BORDER_POS.push({r:0,c})
+  for (let r=1; r<ROWS-1; r++) BORDER_POS.push({r,c:COLS-1})
+  for (let c=COLS-1; c>=0; c--) BORDER_POS.push({r:ROWS-1,c})
+  for (let r=ROWS-2; r>=1; r--) BORDER_POS.push({r,c:0})
+
+  function weighted(): number {
+    const t = WEIGHTS.reduce((a,b)=>a+b,0)
+    let r = Math.random()*t
+    for (let i=0; i<SYM_IDS.length; i++) { r-=WEIGHTS[i]; if (r<=0) return i }
+    return 0
+  }
+
+  // Buat board dengan distribusi yang dikontrol sesuai boardCount per simbol
+  function makeBoard(): (string|null)[][] {
+    const total = BORDER_POS.length // 24 kotak border
+    const pool: string[] = []
+
+    // Isi pool sesuai boardCount tiap simbol
+    for (const def of SYMDEFS) {
+      for (let i=0; i<def.boardCount; i++) pool.push(def.id)
+    }
+
+    // Jika pool kurang dari 24, tambah random sampai penuh
+    while (pool.length < total) {
+      pool.push(SYM_IDS[weighted()])
+    }
+
+    // Shuffle pool
+    for (let i=pool.length-1; i>0; i--) {
+      const j = Math.floor(Math.random()*(i+1));
+      [pool[i], pool[j]] = [pool[j], pool[i]]
+    }
+
+    // Buat grid
+    const grid: (string|null)[][] = Array.from({length:ROWS}, ()=>Array(COLS).fill(null))
+    let idx = 0
+    for (const pos of BORDER_POS) {
+      grid[pos.r][pos.c] = pool[idx++] ?? SYM_IDS[weighted()]
+    }
+    return grid
+  }
+
+  let board      = $state<(string|null)[][]>(makeBoard())
+  let credit     = $state(10000)
+  let bet        = $state(500)
+  let spinning   = $state(false)
+  let currentPos = $state(0)
+  let picked     = $state('apple')
+  let winAmount  = $state(0)
+  let msg        = $state('')
+  let centerLabel= $state('SPIN UNTUK MAIN')
+  let centerNum  = $state('--')
+  let flashWin   = $state(false)
+  let todayCfg    = $derived(getTodayConfig())
+  let autoSpin    = $state(false)
+  let autoCount   = $state(10)   // berapa kali autospin
+  let autoLeft    = $state(0)    // sisa spin
+  let autoDelay   = $state(800)  // jeda antar spin (ms)
+  let autoTimer: ReturnType<typeof setTimeout> | null = null
+
+  type HistoryEntry = {
+    round: number
+    result: 'WIN' | 'LOSE'
+    sym: string
+    emoji: string
+    landed: string
+    bet: number
+    win: number
+    credit: number
+  }
+  let history   = $state<HistoryEntry[]>([])
+  let totalWin  = $state(0)
+  let totalLose      = $state(0)
+  let round          = $state(0)
+  let totalBet       = $state(0)  // total bet masuk
+  let totalPayout    = $state(0)  // total bayar ke member
+  let houseProfit    = $state(0)  // house dapat
+  let memberProfit   = $state(0)  // member dapat (bisa negatif)
+
+  // ── Audio ──────────────────────────────────────────
+  let audioCtx: AudioContext | null = null
+  function getAudio(): AudioContext {
+    if (!audioCtx) audioCtx = new AudioContext()
+    return audioCtx
+  }
+  function playTone(freq: number, dur: number, type: OscillatorType = 'square', vol = 0.3) {
+    try {
+      const ctx = getAudio()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.type = type
+      osc.frequency.setValueAtTime(freq, ctx.currentTime)
+      gain.gain.setValueAtTime(vol, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+dur)
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime+dur)
+    } catch(_) {}
+  }
+  function playTick()     { playTone(440, 0.04, 'square', 0.15) }
+  function playSlowTick() { playTone(330, 0.08, 'square', 0.2) }
+  function playClick()    { playTone(600, 0.05, 'sine', 0.2) }
+  function playCoin()     {
+    playTone(800, 0.05, 'sine', 0.3)
+    setTimeout(() => playTone(1000, 0.08, 'sine', 0.2), 60)
+  }
+  function playWin(amount: number) {
+    const notes = amount >= bet*50
+      ? [523,659,784,1047,1319,1568]
+      : amount >= bet*20
+        ? [523,659,784,1047,1319]
+        : amount >= bet*10
+          ? [523,659,784,1047]
+          : [523,659,784]
+    notes.forEach((f,i) => setTimeout(() => playTone(f, 0.15, 'sine', 0.4), i*110))
+  }
+  function playLose() {
+    playTone(220, 0.1, 'sawtooth', 0.2)
+    setTimeout(() => playTone(180, 0.15, 'sawtooth', 0.15), 100)
+  }
+
+  // ── Helpers ────────────────────────────────────────
+  function getBoardSym(r: number, c: number): string | null { return board[r]?.[c] ?? null }
+  function getPosIndex(r: number, c: number): number { return BORDER_POS.findIndex(p=>p.r===r&&p.c===c) }
+  function isBorderCell(r: number, c: number): boolean { return r===0||r===ROWS-1||c===0||c===COLS-1 }
+  function isInnerCell(r: number, c: number): boolean { return r>=1&&r<=5&&c>=1&&c<=5 }
+  function countSym(id: string): number { return BORDER_POS.filter(p=>board[p.r][p.c]===id).length }
+
+  // ── House Edge ─────────────────────────────────────
+  function getWinningSteps(): number {
+    const total = BORDER_POS.length
+    const wins = BORDER_POS.map((p,i)=>({i,sym:board[p.r][p.c]})).filter(x=>x.sym===picked)
+    if (!wins.length) return getLosingSteps()
+    const target = wins[Math.floor(Math.random()*wins.length)]
+    let steps = (target.i - currentPos + total) % total
+    if (steps < 10) steps += total
+    return steps + total
+  }
+  function getLosingSteps(): number {
+    const total = BORDER_POS.length
+    const loses = BORDER_POS.map((p,i)=>({i,sym:board[p.r][p.c]})).filter(x=>x.sym!==picked)
+    const target = loses[Math.floor(Math.random()*loses.length)]
+    let steps = (target.i - currentPos + total) % total
+    if (steps < 10) steps += total
+    return steps + total
+  }
+
+  function changeBet(d: number) {
+    if (spinning) return
+    const idx = BET_STEPS.indexOf(bet)
+    bet = BET_STEPS[Math.max(0, Math.min(BET_STEPS.length-1, idx+d))]
+    playClick()
+  }
+  function selectPick(id: string) {
+    if (spinning) return
+    picked = id; playClick()
+  }
+
+  const AUTO_OPTIONS = [5, 10, 20, 50, 100]
+  const DELAY_OPTIONS = [{ label:'Cepat', ms:500 }, { label:'Normal', ms:800 }, { label:'Lambat', ms:1200 }]
+
+  function startAuto() {
+    if (autoSpin || credit < bet) return
+    autoSpin = true
+    autoLeft = autoCount
+    runAuto()
+  }
+
+  function stopAuto() {
+    autoSpin = false
+    autoLeft = 0
+    if (autoTimer) { clearTimeout(autoTimer); autoTimer = null }
+  }
+
+  async function runAuto() {
+    if (!autoSpin || autoLeft <= 0 || credit < bet) {
+      stopAuto()
+      return
+    }
+    autoLeft--
+    await doSpin()
+    if (autoSpin && autoLeft > 0 && credit >= bet) {
+      autoTimer = setTimeout(runAuto, autoDelay)
+    } else {
+      stopAuto()
+    }
+  }
+
+  async function doSpin() {
+    if (spinning || credit < bet) return
+    spinning = true; credit -= bet; winAmount = 0; msg = ''
+    centerLabel = 'BERPUTAR...'; centerNum = '--'; flashWin = false
+    playCoin()
+    board = makeBoard()
+    const willWin = Math.random() < getTodayConfig().winChance
+    const steps = willWin ? getWinningSteps() : getLosingSteps()
+
+    await new Promise<void>(resolve => {
+      let step = 0
+      function tick() {
+        currentPos = (currentPos+1) % BORDER_POS.length
+        step++
+        const rem = steps - step
+        let speed = 55
+        if (rem < 8)       { speed = 80+(8-rem)*40; playSlowTick() }
+        else if (rem < 20) { speed = 75; playTick() }
+        else               { playTick() }
+        if (step < steps) setTimeout(tick, speed)
+        else resolve()
+      }
+      setTimeout(tick, 55)
+    })
+
+    const landed = board[BORDER_POS[currentPos].r][BORDER_POS[currentPos].c]!
+    const cnt = countSym(picked)
+    const def = BY_ID[picked]
+
+    round++
+    if (landed === picked) {
+      const win = calcWin(bet, def.pay, cnt)
+      credit += win; winAmount = win; centerNum = String(win)
+      centerLabel = 'WIN!'; flashWin = true; playWin(win)
+      totalWin++
+      totalBet    += bet
+      totalPayout += win
+      houseProfit  = totalBet - totalPayout
+      memberProfit = totalPayout - totalBet
+      history = [{ round, result:'WIN', sym: picked, emoji: def.emoji, landed, bet, win, credit }, ...history].slice(0, 50)
+      if (win >= bet*def.pay*3) msg = '!! JACKPOT !!'
+      else if (win >= bet*20)   msg = 'BIG WIN!'
+      else                      msg = `WIN! +${win}`
+      setTimeout(() => flashWin = false, 2000)
+    } else {
+      centerNum = String(cnt)
+      centerLabel = `${def.label} ada ${cnt} kotak`
+      msg = 'Tidak menang. Coba lagi!'
+      playLose()
+      totalLose++
+      totalBet    += bet
+      houseProfit  = totalBet - totalPayout
+      memberProfit = totalPayout - totalBet
+      const landedDef = BY_ID[landed] ?? { emoji: landed }
+      history = [{ round, result:'LOSE', sym: picked, emoji: def.emoji, landed, bet, win: 0, credit }, ...history].slice(0, 50)
+    }
+    spinning = false
+    if (credit <= 0) {
+      setTimeout(() => { credit = 10000; msg = 'Credit diisi ulang!'; playCoin() }, 2000)
+    }
+  }
+</script>
+
+<div class="game">
+  <div class="top-bar">
+    <div>
+      <div class="lbl">BET</div>
+      <div class="led">{bet}</div>
+    </div>
+    <div class="title-box">
+      <div class="title">BOARD JACKPOT</div>
+      <div class="subtitle">Classic Edition</div>
+    </div>
+    <div style="text-align:right">
+      <div class="lbl">CREDIT</div>
+      <div class="led">{credit}</div>
+    </div>
+  </div>
+
+  <!-- Today mode banner -->
+  <div class="day-banner" class:banner-house={todayCfg.mode==='house'} class:banner-member={todayCfg.mode==='member'}>
+    <div class="day-left">
+      <span class="day-icon">{todayCfg.mode==='house' ? '🏠' : '👤'}</span>
+      <div class="day-info">
+        <div class="day-name">{todayCfg.day} — {todayCfg.label}</div>
+        <div class="day-time">{String(todayCfg.fromHour).padStart(2,'0')}:00 – {String(todayCfg.toHour).padStart(2,'0')}:00</div>
+      </div>
+    </div>
+    <div class="day-mode">
+      {todayCfg.mode === 'house' ? 'HOUSE' : 'MEMBER'}
+    </div>
+    <div class="day-stats">
+      <span>Win {Math.round(todayCfg.winChance*100)}%</span>
+      <span>RTP {Math.round(todayCfg.rtpPct*100)}%</span>
+      <span>Max {todayCfg.maxMult}×</span>
+    </div>
+  </div>
+
+  <!-- Schedule table toggle -->
+  <details class="sched-wrap">
+    <summary class="sched-toggle">📅 Lihat Jadwal Lengkap Hari Ini</summary>
+    <div class="sched-table">
+      {#each SCHEDULE[new Date().getDay()].slots as slot}
+        <div
+          class="sched-row"
+          class:sched-active={new Date().getHours() >= slot.fromHour && new Date().getHours() < slot.toHour}
+          class:sched-house={slot.mode==='house'}
+          class:sched-member={slot.mode==='member'}
+        >
+          <div class="sched-time">{String(slot.fromHour).padStart(2,'0')}:00–{String(slot.toHour).padStart(2,'0')}:00</div>
+          <div class="sched-label">{slot.label}</div>
+          <div class="sched-mode">{slot.mode==='house'?'🏠 HOUSE':'👤 MEMBER'}</div>
+          <div class="sched-stats">
+            Win {Math.round(slot.winChance*100)}% · RTP {Math.round(slot.rtpPct*100)}% · Max {slot.maxMult}×
+          </div>
+        </div>
+      {/each}
+    </div>
+  </details>
+
+  <div class="board-wrap">
+    <div class="board-grid">
+      {#each Array.from({length:ROWS},(_,r)=>r) as r}
+        {#each Array.from({length:COLS},(_,c)=>c) as c}
+          {#if r===1 && c===1}
+            {@const def = BY_ID[picked]}
+            <div class="center-panel">
+              <div class="center-sym-wrap">
+                {#if def.id === 'bar'}
+                  <div class="center-bar">
+                    <div class="cb-top">BAR</div>
+                    <div class="cb-mid">×100</div>
+                    <div class="cb-bot">BAR</div>
+                  </div>
+                {:else if def.id === 'sev77'}
+                  <span class="c77">{def.emoji}</span>
+                {:else}
+                  <span class="c-em">{def.emoji}</span>
+                {/if}
+              </div>
+              <div class="center-count">
+                {BY_ID[picked].boardCount} kotak di board
+              </div>
+              <div class="center-num" class:win-flash={flashWin}>{centerNum}</div>
+              <div class="center-lbl">{centerLabel}</div>
+            </div>
+          {:else if isInnerCell(r,c)}
+            <!-- skip -->
+          {:else if isBorderCell(r,c)}
+            {@const posIdx = getPosIndex(r,c)}
+            {@const symId  = getBoardSym(r,c)}
+            {@const def    = symId ? BY_ID[symId] : null}
+            <div
+              class="cell"
+              class:active={posIdx === currentPos}
+              class:highlight={symId === picked && posIdx !== currentPos}
+            >
+              {#if def}
+                {#if def.id === 'bar'}
+                  <div class="bar-wrap">
+                    <div class="bar-top">BAR</div>
+                    <div class="bar-mid">×100</div>
+                    <div class="bar-bot">BAR</div>
+                  </div>
+                {:else if def.id === 'sev77'}
+                  <span class="cell-77">{def.emoji}</span>
+                {:else}
+                  <span class="cell-em">{def.emoji}</span>
+                {/if}
+              {/if}
+            </div>
+          {:else}
+            <div class="cell empty"></div>
+          {/if}
+        {/each}
+      {/each}
+    </div>
+  </div>
+
+  <!-- Paytable ringkas -->
+  <div class="section-lbl">SIMBOL & MULTIPLIER</div>
+  <div class="paytable">
+    {#each SYMDEFS as def}
+      <button
+        class="pay-btn"
+        class:selected={def.id === picked}
+        onclick={() => selectPick(def.id)}
+        disabled={spinning}
+      >
+        {#if def.id === 'bar'}
+          <div class="pt-bar">
+            <div class="ptb-top">BAR</div>
+            <div class="ptb-mid">×100</div>
+          </div>
+        {:else if def.id === 'sev77'}
+          <span class="pt-77">{def.emoji}</span>
+        {:else}
+          <span class="pt-em">{def.emoji}</span>
+        {/if}
+        <div class="pt-info">
+          <div class="pt-pay">×{def.pay}</div>
+          <div class="pt-count">{def.boardCount} kotak</div>
+        </div>
+      </button>
+    {/each}
+  </div>
+
+  <!-- Autospin -->
+  <div class="auto-wrap">
+    <div class="auto-row">
+      <div class="auto-group">
+        <div class="lbl">JUMLAH SPIN</div>
+        <div class="auto-opts">
+          {#each AUTO_OPTIONS as n}
+            <button
+              class="auto-opt"
+              class:selected={autoCount === n}
+              onclick={() => autoCount = n}
+              disabled={autoSpin}
+            >{n}×</button>
+          {/each}
+        </div>
+      </div>
+      <div class="auto-group">
+        <div class="lbl">KECEPATAN</div>
+        <div class="auto-opts">
+          {#each DELAY_OPTIONS as d}
+            <button
+              class="auto-opt"
+              class:selected={autoDelay === d.ms}
+              onclick={() => autoDelay = d.ms}
+              disabled={autoSpin}
+            >{d.label}</button>
+          {/each}
+        </div>
+      </div>
+    </div>
+    <div class="auto-row" style="justify-content:center;gap:10px;margin-top:6px">
+      {#if autoSpin}
+        <div class="auto-status">
+          Auto spin: <span class="auto-left">{autoLeft}</span> sisa
+        </div>
+        <button class="btn-stop" onclick={stopAuto}>⏹ STOP</button>
+      {:else}
+        <button
+          class="btn-auto"
+          onclick={startAuto}
+          disabled={spinning || credit < bet}
+        >▶ AUTO {autoCount}×</button>
+      {/if}
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="bet-ctrl">
+      <div class="lbl" style="text-align:center">BET</div>
+      <div style="display:flex;gap:4px;align-items:center;margin-top:2px">
+        <button class="btn" onclick={() => changeBet(-1)} disabled={spinning}>-</button>
+        <div class="bet-val">{bet}</div>
+        <button class="btn" onclick={() => changeBet(1)} disabled={spinning}>+</button>
+      </div>
+    </div>
+    <button class="btn-spin" onclick={doSpin} disabled={spinning || credit < bet}>
+      {spinning ? '...' : 'SPIN'}
+    </button>
+    <div style="text-align:center">
+      <div class="lbl">WIN</div>
+      <div class="win-val">{winAmount}</div>
+    </div>
+  </div>
+  <div class="msg" class:win-flash={flashWin}>{msg}</div>
+
+  <!-- Stats & History -->
+  <div class="stats-bar">
+    <div class="stat-box win-stat">
+      <div class="stat-label">TOTAL WIN</div>
+      <div class="stat-val">{totalWin}</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">TOTAL ROUND</div>
+      <div class="stat-val">{round}</div>
+    </div>
+    <div class="stat-box lose-stat">
+      <div class="stat-label">TOTAL LOSE</div>
+      <div class="stat-val">{totalLose}</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">WIN RATE</div>
+      <div class="stat-val">{round > 0 ? Math.round(totalWin/round*100) : 0}%</div>
+    </div>
+  </div>
+
+  <!-- Profit Panel -->
+  {#if round > 0}
+  <div class="profit-wrap">
+    <div class="profit-box house-box">
+      <div class="profit-label">🏠 HOUSE PROFIT</div>
+      <div class="profit-val" class:profit-pos={houseProfit>=0} class:profit-neg={houseProfit<0}>
+        {houseProfit >= 0 ? '+' : ''}{houseProfit.toLocaleString()}
+      </div>
+      <div class="profit-sub">dari {totalBet.toLocaleString()} total bet</div>
+    </div>
+    <div class="profit-box member-box">
+      <div class="profit-label">👤 MEMBER PROFIT</div>
+      <div class="profit-val" class:profit-pos={memberProfit>=0} class:profit-neg={memberProfit<0}>
+        {memberProfit >= 0 ? '+' : ''}{memberProfit.toLocaleString()}
+      </div>
+      <div class="profit-sub">payout {totalPayout.toLocaleString()}</div>
+    </div>
+  </div>
+  {/if}
+
+  {#if history.length > 0}
+  <div class="history-wrap">
+    <div class="history-title">RIWAYAT SPIN</div>
+    <div class="history-list">
+      {#each history as h}
+        <div class="h-row" class:h-win={h.result==='WIN'} class:h-lose={h.result==='LOSE'}>
+          <div class="h-round">#{h.round}</div>
+          <div class="h-badge" class:badge-win={h.result==='WIN'} class:badge-lose={h.result==='LOSE'}>
+            {h.result}
+          </div>
+          <div class="h-sym">
+            {#if h.sym === 'bar'}
+              <span class="h-bar">BAR</span>
+            {:else if h.sym === 'sev77'}
+              <span class="h-77">77</span>
+            {:else}
+              {h.emoji}
+            {/if}
+          </div>
+          <div class="h-detail">
+            Bet <span class="h-num">{h.bet}</span>
+            {#if h.result === 'WIN'}
+              → Win <span class="h-win-num">+{h.win}</span>
+            {:else}
+              → Lose
+            {/if}
+          </div>
+          <div class="h-credit">{h.credit}</div>
+        </div>
+      {/each}
+    </div>
+  </div>
+  {/if}
+</div>
+
+<style>
+  * { box-sizing: border-box; }
+  .game { max-width: 960px; margin: 0 auto; padding: 1rem; font-family: monospace; background: transparent; user-select: none; }
+  .top-bar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .led { background: #1a0000; color: #ff3333; font-size: 30px; padding: 10px 20px; border-radius: 6px; min-width: 120px; text-align: center; letter-spacing: 3px; font-family: monospace; }
+  .lbl { font-size: 10px; color: #aaa; margin-bottom: 2px; }
+  .title-box { text-align: center; padding-top: 4px; }
+  .title { font-size: 18px; color: #ffd700; font-weight: 700; letter-spacing: 2px; }
+  .subtitle { font-size: 10px; color: #aaa; }
+
+  .board-wrap { background: #1a1a2e; border: 3px solid #c8a84b; border-radius: 12px; padding: 8px; }
+  .board-grid { display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(7, 1fr); gap: 7px; }
+
+  .cell {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; border: 2px solid #444; background: #0d0d1a; overflow: hidden;
+    transition: background 0.08s, border-color 0.08s, box-shadow 0.08s, transform 0.08s;
+  }
+  .cell.active { background: #3a2a00; border-color: #ffd700; box-shadow: 0 0 12px #ffd700, 0 0 24px #ffd70066; transform: scale(1.1); z-index: 2; }
+  .cell.highlight { background: #003a1a; border-color: #00ff88; box-shadow: 0 0 8px #00ff8866; }
+  .cell.empty { background: transparent; border: none; }
+
+  .cell-em  { font-size: 42px; line-height: 1; }
+  .cell-77  { font-size: 28px; font-weight: 800; color: #ff3300; line-height: 1; }
+
+  .bar-wrap { display: flex; flex-direction: column; align-items: center; width: 92%; }
+  .bar-top, .bar-bot { background: #fff; color: #000; font-size: 14px; font-weight: 800; width: 100%; text-align: center; line-height: 1.5; letter-spacing: 1px; }
+  .bar-mid { background: #cc2200; color: #fff; font-size: 14px; font-weight: 800; width: 100%; text-align: center; line-height: 1.6; }
+
+  /* Center panel */
+  .center-panel {
+    grid-column: 2/7; grid-row: 2/7;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #0a1628; border-radius: 10px; border: 2px solid #c8a84b; gap: 6px; padding: 12px;
+  }
+  .center-sym-wrap { display: flex; align-items: center; justify-content: center; }
+  .c-em  { font-size: 100px; line-height: 1; }
+  .c77   { font-size: 80px; font-weight: 800; color: #ff3300; line-height: 1; }
+  .center-bar { width: 160px; }
+  .cb-top, .cb-bot { background: #fff; color: #000; font-size: 22px; font-weight: 800; text-align: center; padding: 5px 0; letter-spacing: 2px; }
+  .cb-mid { background: #cc2200; color: #fff; font-size: 32px; font-weight: 800; text-align: center; padding: 8px 0; }
+  .center-count { font-size: 11px; color: #888; }
+  .center-num { font-size: 72px; color: #ff3333; line-height: 1; font-family: monospace; font-weight: 700; }
+  .center-lbl { font-size: 15px; color: #aaa; text-align: center; }
+
+  /* Paytable as pick buttons */
+  .section-lbl { font-size: 10px; color: #aaa; text-align: center; margin-top: 10px; margin-bottom: 6px; }
+  .paytable { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .pay-btn {
+    background: #0d0d1a; border: 2px solid #333; border-radius: 8px;
+    padding: 8px 6px; cursor: pointer; transition: all 0.15s; color: white;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .pay-btn:hover:not(:disabled) { border-color: #ffd700; background: #1a1a00; }
+  .pay-btn.selected { border-color: #ffd700; background: #2a2000; box-shadow: 0 0 10px #ffd70088; }
+  .pay-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .pt-em  { font-size: 42px; line-height: 1; }
+  .pt-77  { font-size: 34px; font-weight: 800; color: #ff3300; }
+  .pt-bar { width: 52px; }
+  .ptb-top { background: #fff; color: #000; font-size: 9px; font-weight: 800; text-align: center; padding: 2px; letter-spacing: 1px; border-radius: 3px 3px 0 0; }
+  .ptb-mid { background: #cc2200; color: #fff; font-size: 11px; font-weight: 800; text-align: center; padding: 2px; border-radius: 0 0 3px 3px; }
+  .pt-info { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .pt-pay   { font-size: 14px; color: #ffd700; font-weight: 700; }
+  .pt-count { font-size: 11px; color: #666; }
+
+  /* Controls */
+  .controls { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 12px; }
+  .bet-ctrl { text-align: center; }
+  .bet-val { color: #ffd700; font-size: 16px; width: 60px; text-align: center; }
+  .btn { background: #1a1a2e; color: #ffd700; border: 2px solid #c8a84b; border-radius: 8px; padding: 6px 14px; font-size: 16px; cursor: pointer; font-family: monospace; }
+  .btn:hover:not(:disabled) { background: #2a2a4e; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-spin { background: #cc1111; color: white; border: 3px solid #c8a84b; border-radius: 50%; width: 74px; height: 74px; font-size: 15px; font-weight: 700; cursor: pointer; font-family: monospace; transition: background 0.15s, transform 0.1s; }
+  .btn-spin:hover:not(:disabled) { background: #ee2222; transform: scale(1.06); }
+  .btn-spin:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .win-val { font-size: 24px; color: #00ff88; font-family: monospace; min-width: 60px; text-align: center; }
+  .msg { text-align: center; min-height: 26px; font-size: 15px; color: #ffd700; margin-top: 8px; font-family: monospace; font-weight: 700; }
+  .win-flash { animation: wflash 0.4s ease-in-out 4; }
+  @keyframes wflash { 0%,100% { color: #ffd700; } 50% { color: #ff3333; } }
+
+  /* Stats */
+  .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-top: 12px; }
+  .stat-box { background: #0d0d1a; border: 1px solid #333; border-radius: 8px; padding: 8px 6px; text-align: center; }
+  .stat-box.win-stat  { border-color: #00ff88; }
+  .stat-box.lose-stat { border-color: #ff3333; }
+  .stat-label { font-size: 9px; color: #666; margin-bottom: 2px; }
+  .stat-val   { font-size: 20px; color: #ffd700; font-weight: 700; font-family: monospace; }
+  .stat-box.win-stat  .stat-val { color: #00ff88; }
+  .stat-box.lose-stat .stat-val { color: #ff4444; }
+
+  /* History */
+  .history-wrap { margin-top: 10px; }
+  .history-title { font-size: 10px; color: #aaa; text-align: center; margin-bottom: 6px; letter-spacing: 1px; }
+  .history-list  { display: flex; flex-direction: column; gap: 4px; max-height: 280px; overflow-y: auto; }
+  .h-row {
+    display: flex; align-items: center; gap: 8px;
+    background: #0d0d1a; border: 1px solid #222; border-radius: 6px; padding: 6px 10px;
+    font-size: 12px;
+  }
+  .h-row.h-win  { border-color: #00ff8844; }
+  .h-row.h-lose { border-color: #ff333322; }
+  .h-round  { color: #555; font-size: 11px; min-width: 28px; }
+  .h-badge  { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; min-width: 36px; text-align: center; }
+  .badge-win  { background: #003a1a; color: #00ff88; }
+  .badge-lose { background: #3a0000; color: #ff4444; }
+  .h-sym  { font-size: 18px; min-width: 28px; text-align: center; }
+  .h-bar  { background: #fff; color: #000; font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 2px; }
+  .h-77   { color: #ff3300; font-weight: 800; font-size: 13px; }
+  .h-detail { flex: 1; color: #888; font-size: 11px; }
+  .h-num      { color: #ffd700; }
+  .h-win-num  { color: #00ff88; font-weight: 700; }
+  .h-credit   { color: #aaa; font-size: 11px; font-family: monospace; min-width: 52px; text-align: right; }
+
+  /* Profit panel */
+  .profit-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .profit-box  { background: #0d0d1a; border: 1px solid #333; border-radius: 10px; padding: 12px; text-align: center; }
+  .profit-box.house-box  { border-color: #c8a84b; }
+  .profit-box.member-box { border-color: #4488cc; }
+  .profit-label { font-size: 12px; color: #aaa; margin-bottom: 6px; }
+  .profit-val   { font-size: 28px; font-weight: 700; font-family: monospace; line-height: 1; }
+  .profit-val.profit-pos { color: #00ff88; }
+  .profit-val.profit-neg { color: #ff4444; }
+  .profit-sub   { font-size: 10px; color: #555; margin-top: 4px; }
+
+  /* Autospin */
+  .auto-wrap { background: #0d0d1a; border: 1px solid #333; border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+  .auto-row  { display: flex; gap: 16px; align-items: flex-start; }
+  .auto-group { display: flex; flex-direction: column; gap: 4px; }
+  .auto-opts { display: flex; gap: 4px; flex-wrap: wrap; }
+  .auto-opt  {
+    background: #1a1a2e; color: #aaa; border: 1px solid #333;
+    border-radius: 6px; padding: 4px 10px; font-size: 11px; cursor: pointer;
+    font-family: monospace; transition: all 0.15s;
+  }
+  .auto-opt:hover:not(:disabled) { border-color: #ffd700; color: #ffd700; }
+  .auto-opt.selected { border-color: #ffd700; color: #ffd700; background: #2a2000; }
+  .auto-opt:disabled { opacity: 0.4; cursor: not-allowed; }
+  .auto-status { font-size: 13px; color: #aaa; display: flex; align-items: center; gap: 6px; }
+  .auto-left   { color: #ffd700; font-weight: 700; font-size: 16px; font-family: monospace; }
+  .btn-auto {
+    background: #1a4a1a; color: #00ff88; border: 2px solid #00cc66;
+    border-radius: 8px; padding: 8px 20px; font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: monospace; transition: all 0.15s;
+  }
+  .btn-auto:hover:not(:disabled) { background: #225522; }
+  .btn-auto:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-stop {
+    background: #4a1a1a; color: #ff4444; border: 2px solid #cc2222;
+    border-radius: 8px; padding: 8px 20px; font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: monospace; transition: all 0.15s;
+    animation: pulse-stop 1s ease-in-out infinite;
+  }
+  .btn-stop:hover { background: #662222; }
+  @keyframes pulse-stop { 0%,100%{box-shadow:0 0 0 0 #cc222244} 50%{box-shadow:0 0 0 6px #cc222200} }
+
+  /* Day banner */
+  .day-banner {
+    display: flex; align-items: center; justify-content: space-between;
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 6px;
+    border: 1px solid #444; font-size: 12px;
+  }
+  .day-banner.banner-house  { background: #1a0d00; border-color: #c8a84b; }
+  .day-banner.banner-member { background: #001a0d; border-color: #00cc66; }
+  .day-left  { display: flex; align-items: center; gap: 8px; }
+  .day-icon  { font-size: 20px; }
+  .day-info  { display: flex; flex-direction: column; gap: 2px; }
+  .day-name  { color: #ffd700; font-weight: 700; font-size: 12px; }
+  .day-time  { color: #888; font-size: 10px; font-family: monospace; }
+  .day-mode  { font-weight: 700; font-size: 14px; letter-spacing: 1px; }
+  .banner-house  .day-mode { color: #c8a84b; }
+  .banner-member .day-mode { color: #00cc66; }
+  .day-stats { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; font-size: 10px; color: #888; }
+  .day-stats span { background: #ffffff11; padding: 2px 6px; border-radius: 4px; }
+
+  /* Schedule table */
+  .sched-wrap { margin-bottom: 10px; }
+  .sched-toggle {
+    font-size: 11px; color: #888; cursor: pointer; padding: 4px 8px;
+    border-radius: 6px; background: #0d0d1a; border: 1px solid #222;
+    list-style: none; text-align: center;
+  }
+  .sched-toggle:hover { color: #ffd700; border-color: #444; }
+  .sched-table { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+  .sched-row {
+    display: flex; align-items: center; gap: 8px;
+    background: #0d0d1a; border: 1px solid #222; border-radius: 6px;
+    padding: 6px 10px; font-size: 11px;
+  }
+  .sched-row.sched-active { border-color: #ffd700; background: #1a1500; }
+  .sched-row.sched-house.sched-active  { border-color: #c8a84b; }
+  .sched-row.sched-member.sched-active { border-color: #00cc66; background: #001a0a; }
+  .sched-time  { color: #ffd700; font-family: monospace; font-size: 10px; min-width: 90px; }
+  .sched-label { color: #aaa; min-width: 70px; }
+  .sched-mode  { font-weight: 700; min-width: 80px; }
+  .sched-row.sched-house   .sched-mode { color: #c8a84b; }
+  .sched-row.sched-member  .sched-mode { color: #00cc66; }
+  .sched-stats { color: #555; font-size: 10px; flex: 1; text-align: right; }
+  .sched-row.sched-active .sched-stats { color: #888; }
+</style>
