@@ -566,47 +566,47 @@
 <div class="game">
   <!-- Top bar -->
   <div class="top-bar">
-    <!-- BET + SIMBOL di kiri -->
-    <div class="top-left">
-      <div class="bet-inline">
+    <!-- Row 1: BET | TITLE | CREDIT -->
+    <div class="top-row1">
+      <div class="top-bet">
         <div class="lbl">BET</div>
-        <div style="display:flex;gap:4px;align-items:center;margin-top:2px">
-          <button class="btn-sm" onclick={()=>changeBet(-1)} disabled={spinning}>-</button>
-          <div class="led">{fmt(bet)}</div>
-          <button class="btn-sm" onclick={()=>changeBet(1)} disabled={spinning}>+</button>
+        <div class="bet-row">
+            <button class="btn-sm" onclick={()=>changeBet(-1)} disabled={spinning}>-</button>
+            <div class="led">{fmt(bet)}</div>
+            <button class="btn-sm" onclick={()=>changeBet(1)} disabled={spinning}>+</button>
         </div>
       </div>
-    </div>
 
-    <!-- Title di tengah -->
-    <div class="title-box">
-      <div class="title">BOARD JACKPOT</div>
-      <div class="subtitle">Pragmatic Style · RTP {actualRTP || 94}%</div>
-      <div class="top-btns">
-        <button class="btn-shuffle" onclick={shuffleBoard} disabled={spinning}>🔀</button>
-        <button class="btn-shuffle" class:admin-active={showVol} onclick={()=>showVol=!showVol}>
-          {#if volId==='low'}🟢{:else if volId==='high'}🔴{:else}🟡{/if}
-          {VOL_TIERS.find(v=>v.id===volId)?.label}
-        </button>
-        <button class="btn-shuffle" class:admin-active={showAdmin} onclick={()=>showAdmin=!showAdmin}>⚙️</button>
-        <button class="btn-shuffle" class:admin-active={showSim} onclick={()=>showSim=!showSim}>📊</button>
-        <button class="btn-info-tog" onclick={()=>showInfo=!showInfo}>ℹ️</button>
+      <div class="top-title">
+        <div class="title">BOARD JACKPOT</div>
+        <div class="subtitle">Pragmatic Style · RTP {actualRTP || 94}%</div>
+      </div>
+
+      <div class="top-credit">
+        <div class="lbl" style="text-align:right">CREDIT</div>
+        <div
+          class="led led-credit"
+          class:led-low={credit < bet * 5}
+          class:led-empty={credit <= 0}
+          class:led-up={creditDir==='up'}
+          class:led-down={creditDir==='down'}
+          class:led-rolling={creditRolling}
+          style="font-size:{creditFontSize}"
+        >{fmt(displayCredit)}</div>
       </div>
     </div>
 
-    <!-- CREDIT di kanan -->
-    <div class="top-right">
-      <div class="lbl" style="text-align:right">CREDIT</div>
-      <div
-        class="led led-credit"
-        class:led-low={credit < bet * 5}
-        class:led-empty={credit <= 0}
-        class:led-up={creditDir==='up'}
-        class:led-down={creditDir==='down'}
-        class:led-rolling={creditRolling}
-        style="font-size:{creditFontSize}"
-      >{fmt(displayCredit)}</div>
-      <button class="btn-topup" style="margin-top:4px;width:100%" onclick={openTopup}>+ Topup</button>
+    <!-- Row 2: action buttons (full width, centered) -->
+    <div class="top-row2">
+      <button class="btn-shuffle" onclick={shuffleBoard} disabled={spinning}>🔀</button>
+      <button class="btn-shuffle" class:admin-active={showVol} onclick={()=>showVol=!showVol}>
+        {#if volId==='low'}🟢{:else if volId==='high'}🔴{:else}🟡{/if}
+        {VOL_TIERS.find(v=>v.id===volId)?.label}
+      </button>
+      <button class="btn-shuffle" class:admin-active={showAdmin} onclick={()=>showAdmin=!showAdmin}>⚙️</button>
+      <button class="btn-shuffle" class:admin-active={showSim} onclick={()=>showSim=!showSim}>📊</button>
+      <button class="btn-info-tog" onclick={()=>showInfo=!showInfo}>ℹ️</button>
+      <button class="btn-topup" onclick={openTopup}>+ Topup</button>
     </div>
   </div>
 
@@ -926,9 +926,10 @@
 
 
 
+
   <!-- Info Win Panel — collapsible -->
   <details class="info-panel">
-  <summary class="info-summary">💡 INFO TARUHAN · {fmt(bet)} × {pickedDef.pay} = {fmt(potentialWin)}</summary>
+    <summary class="info-summary">💡 INFO TARUHAN · {fmt(bet)} × {pickedDef.pay} = {fmt(potentialWin)}</summary>
     <div class="info-content">
       <div class="info-formula">
         <span class="info-bet">{fmt(bet)}</span>
@@ -1264,14 +1265,16 @@
   :global(#app){background:#111118!important;min-height:100vh}
   :global(meta[name=theme-color]){content:#111118}
   .game{max-width:640px;margin:0 auto;padding:0.75rem;font-family:monospace;background:#111118;user-select:none;min-height:100vh}
-  .top-bar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;min-width:0}
-  .top-left{display:flex;flex-direction:column;gap:4px;min-width:0}
-  .top-right{display:flex;flex-direction:column;align-items:flex-end;gap:0;min-width:0}
-  .bet-inline{display:flex;flex-direction:column}
+  .top-bar{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+  .top-row1{display:flex;align-items:center;justify-content:space-between;gap:4px}
+  .top-bet{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .bet-row{display:flex;gap:3px;align-items:center}
+  .top-title{text-align:center;flex:1;min-width:0}
+  .top-credit{display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:0}
+  .top-row2{display:flex;gap:4px;align-items:center;justify-content:center;flex-wrap:wrap}
   .btn-sm{background:#1a1a2e;color:#ffd700;border:2px solid #c8a84b;border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer;font-family:monospace}
   .btn-sm:hover:not(:disabled){background:#2a2a4e}
   .btn-sm:disabled{opacity:0.4;cursor:not-allowed}
-  .top-btns{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;justify-content:center}
 
   /* Volatility modal */
   .vol-modal-btn{width:100%;background:#0d0d1a;border:2px solid #333;border-radius:10px;padding:10px 14px;cursor:pointer;transition:all 0.15s;color:white;text-align:left}
