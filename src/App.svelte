@@ -1163,7 +1163,9 @@
 
 <style>
   *{box-sizing:border-box}
-  .game{max-width:960px;margin:0 auto;padding:1rem;font-family:monospace;background:transparent;user-select:none}
+  :global(body){background:#111118!important;margin:0;padding:0}
+  :global(html){background:#111118!important}
+  .game{max-width:960px;margin:0 auto;padding:1rem;font-family:monospace;background:#111118;user-select:none;min-height:100vh}
   .top-bar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
   .led{background:#1a0000;color:#ff3333;font-size:22px;padding:8px 14px;border-radius:6px;min-width:100px;text-align:center;letter-spacing:2px;font-family:monospace}
   .lbl{font-size:10px;color:#aaa;margin-bottom:2px}
